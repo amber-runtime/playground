@@ -16,9 +16,12 @@ dependencies = [
     "python-dotenv>=1.2.2",
     "dbos-openai-agents>=0.3.0",
     "ddgs>=9.0",
-    "arize-phoenix",
-    "openinference-instrumentation-openai-agents",
-    "opentelemetry-exporter-otlp",
+    "openinference-instrumentation-openai>=0.1.47",
+    "arize-phoenix>=15.7.0",
+    "opentelemetry-sdk>=1.41.1",
+    "opentelemetry-exporter-otlp>=1.41.1",
+    "openinference-instrumentation-openai-agents>=1.4.3",
+    "httpx>=0.28.1",
 ]
 
 [tool.uv.workspace]
