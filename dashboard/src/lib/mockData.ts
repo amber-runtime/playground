@@ -1,4 +1,4 @@
-import type { WorkflowDetail } from './types'
+import type { WorkflowDetail, WorkflowSummary } from './types'
 
 // ── SUCCESS fixture — 7 steps, 2 web searches, final answer ──────────────────
 
@@ -316,3 +316,120 @@ export const mockWorkflowError: WorkflowDetail = {
     },
   ],
 }
+
+// ── Workflow list — 10 entries ─────────────────────────────────────────────────
+// Sorted newest-first. Three entries map to the detail fixtures above;
+// the other seven are list-only (detail page shows an empty state for them).
+
+export const mockWorkflowList: WorkflowSummary[] = [
+  // PENDING / recovered once — just started
+  {
+    workflow_id: '019e3d70-6666-7abc-def0-667778901abc',
+    name: 'run_agent',
+    status: 'PENDING',
+    created_at: 1779289080000,
+    updated_at: 1779289085000,
+    recovery_attempts: 1,
+    step_count: 3,
+    input: "{'args': ('Rust async runtime comparison',), 'kwargs': {}}",
+  },
+  // SUCCESS / no recovery — 30 min ago
+  {
+    workflow_id: '019e3d40-3333-7abc-def0-334456789abc',
+    name: 'run_agent',
+    status: 'SUCCESS',
+    created_at: 1779287400000,
+    updated_at: 1779287418000,
+    recovery_attempts: 0,
+    step_count: 6,
+    input: "{'args': ('RAG architecture best practices',), 'kwargs': {}}",
+  },
+  // ERROR / no recovery — 1h ago
+  {
+    workflow_id: '019e3d80-7777-7abc-def0-778889012abc',
+    name: 'run_agent',
+    status: 'ERROR',
+    created_at: 1779285600000,
+    updated_at: 1779285618000,
+    recovery_attempts: 0,
+    step_count: 3,
+    input: "{'args': ('neural network pruning techniques',), 'kwargs': {}}",
+  },
+  // SUCCESS / recovered once — 3h ago
+  {
+    workflow_id: '019e3d60-5555-7abc-def0-556667890abc',
+    name: 'run_agent',
+    status: 'SUCCESS',
+    created_at: 1779278400000,
+    updated_at: 1779278427000,
+    recovery_attempts: 1,
+    step_count: 7,
+    input: "{'args': ('microservices vs monolith 2026',), 'kwargs': {}}",
+  },
+  // SUCCESS / no recovery — 5h ago
+  {
+    workflow_id: '019e3d20-1111-7abc-def0-123456789abc',
+    name: 'run_agent',
+    status: 'SUCCESS',
+    created_at: 1779271200000,
+    updated_at: 1779271221000,
+    recovery_attempts: null,
+    step_count: 9,
+    input: "{'args': ('vector database comparison 2026',), 'kwargs': {}}",
+  },
+  // SUCCESS / no recovery — 8h ago
+  {
+    workflow_id: '019e3d30-2222-7abc-def0-223456789abc',
+    name: 'run_agent',
+    status: 'SUCCESS',
+    created_at: 1779260400000,
+    updated_at: 1779260420000,
+    recovery_attempts: null,
+    step_count: 5,
+    input: "{'args': ('LLM fine-tuning techniques',), 'kwargs': {}}",
+  },
+  // SUCCESS / no recovery — yesterday (maps to mockWorkflowSuccess)
+  {
+    workflow_id: '019e3c95-08de-7451-af78-01a1f83c43bb',
+    name: 'run_agent',
+    status: 'SUCCESS',
+    created_at: 1779132860641,
+    updated_at: 1779132887183,
+    recovery_attempts: null,
+    step_count: 7,
+    input: "{'args': ('durable execution',), 'kwargs': {}}",
+  },
+  // ERROR / 3 recoveries — yesterday (maps to mockWorkflowError)
+  {
+    workflow_id: '019e3cb3-9a14-7c65-dd21-3b8f4e0d2c55',
+    name: 'run_agent',
+    status: 'ERROR',
+    created_at: 1779138000000,
+    updated_at: 1779138019420,
+    recovery_attempts: 3,
+    step_count: 4,
+    input: "{'args': ('quantum computing applications 2026',), 'kwargs': {}}",
+  },
+  // PENDING / no recovery — yesterday (maps to mockWorkflowPending)
+  {
+    workflow_id: '019e3ca1-3f22-7b90-bc34-9d5e2c7f1a44',
+    name: 'run_agent',
+    status: 'PENDING',
+    created_at: 1779140000000,
+    updated_at: 1779140008315,
+    recovery_attempts: null,
+    step_count: 4,
+    input: "{'args': ('DBOS vs Temporal performance benchmarks',), 'kwargs': {}}",
+  },
+  // SUCCESS / recovered twice — 2 days ago
+  {
+    workflow_id: '019e3d50-4444-7abc-def0-445556789abc',
+    name: 'run_agent',
+    status: 'SUCCESS',
+    created_at: 1779116400000,
+    updated_at: 1779116437000,
+    recovery_attempts: 2,
+    step_count: 8,
+    input: "{'args': ('transformer architecture explained',), 'kwargs': {}}",
+  },
+]

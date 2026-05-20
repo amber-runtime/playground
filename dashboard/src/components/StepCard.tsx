@@ -50,7 +50,7 @@ function CopyInline({ text }: { text: string }) {
 function StepIcon({ functionName }: { functionName: string }) {
   const kind = getStepKind(functionName)
   const cls = 'shrink-0'
-  if (kind === 'llm') return <Brain size={15} className={`${cls} text-indigo-500`} />
+  if (kind === 'llm') return <Brain size={15} className={`${cls} text-slate-500`} />
   if (kind === 'sleep') return <Clock size={15} className={`${cls} text-gray-400`} />
   if (functionName === 'search_web') return <Search size={15} className={`${cls} text-emerald-500`} />
   return <Wrench size={15} className={`${cls} text-sky-500`} />
@@ -97,7 +97,7 @@ function LLMStepBody({ step }: { step: Step }) {
               <span className="text-gray-400 mt-0.5 shrink-0">→</span>
               <span>
                 <span className="text-gray-500">Requested </span>
-                <code className="font-mono text-indigo-600 text-xs bg-indigo-50 px-1 py-0.5 rounded">
+                <code className="font-mono text-slate-700 text-xs bg-slate-100 px-1 py-0.5 rounded">
                   {fc.name}
                 </code>
                 <pre className="mt-1.5 text-xs bg-gray-50 rounded p-2 overflow-x-auto text-gray-700 font-mono leading-relaxed">
@@ -216,7 +216,7 @@ export function StepCard({ step, index, isActive }: Props) {
     <div
       ref={cardRef}
       className={`bg-white border rounded-lg overflow-hidden transition-shadow ${
-        hasError ? 'border-red-300' : isActive ? 'border-indigo-300 shadow-sm' : 'border-gray-200'
+        hasError ? 'border-red-300' : isActive ? 'border-slate-400 shadow-sm' : 'border-gray-200'
       }`}
     >
       {/* Header — always visible */}

@@ -36,7 +36,7 @@ Three fixtures are baked in: SUCCESS, PENDING, ERROR. Swap between them via the 
 
 ## Backend prerequisites (for future wiring)
 
-Targets `single_server_poc.py` on port 8002. Pending one-line backend changes before wiring:
+Targets `single_server_poc.py` on port 8002. Pending one-line backend changes before wiring:codex
 
 - `load_output=True` so the final answer card renders
 - `load_input=True` so the topic card renders

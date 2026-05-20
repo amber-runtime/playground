@@ -11,14 +11,14 @@ interface Props {
 }
 
 const KIND_COLOR: Record<ReturnType<typeof getStepKind>, string> = {
-  llm: 'bg-indigo-400 hover:bg-indigo-500',
+  llm: 'bg-slate-400 hover:bg-slate-500',
   tool: 'bg-emerald-400 hover:bg-emerald-500',
   sleep: 'bg-gray-300 hover:bg-gray-400',
   other: 'bg-sky-400 hover:bg-sky-500',
 }
 
 const KIND_ACTIVE: Record<ReturnType<typeof getStepKind>, string> = {
-  llm: 'bg-indigo-600',
+  llm: 'bg-slate-600',
   tool: 'bg-emerald-600',
   sleep: 'bg-gray-500',
   other: 'bg-sky-600',
@@ -27,7 +27,7 @@ const KIND_ACTIVE: Record<ReturnType<typeof getStepKind>, string> = {
 // Subtle alternating band colors per turn kind
 const TURN_BAND: Record<Turn['kind'], (even: boolean) => string> = {
   preflight: () => 'bg-gray-100/60',
-  agent: (even) => (even ? 'bg-transparent' : 'bg-indigo-50/40'),
+  agent: (even) => (even ? 'bg-transparent' : 'bg-slate-50/40'),
   final: () => 'bg-green-50/50',
 }
 
@@ -172,7 +172,7 @@ export function GanttStrip({
                   <div
                     className={`h-full w-full rounded transition-colors ${colorClass} ${
                       step.completed_at_epoch_ms == null ? 'opacity-60 animate-pulse' : ''
-                    } ${isActive ? 'ring-2 ring-offset-1 ring-indigo-300' : ''}`}
+                    } ${isActive ? 'ring-2 ring-offset-1 ring-slate-400' : ''}`}
                   />
                   {/* Tooltip */}
                   <div className="hidden group-hover:block absolute z-10 bottom-full left-1/2 -translate-x-1/2 mb-1.5 pointer-events-none">

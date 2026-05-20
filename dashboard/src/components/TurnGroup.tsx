@@ -21,7 +21,7 @@ function PreflightBadge() {
 
 function AgentBadge({ number }: { number: number }) {
   return (
-    <span className="shrink-0 px-2 py-0.5 rounded text-xs font-semibold bg-indigo-50 text-indigo-600 ring-1 ring-indigo-200">
+    <span className="shrink-0 px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-700 ring-1 ring-slate-200">
       Turn {number}
     </span>
   )
@@ -86,7 +86,7 @@ function turnContainsStep(turn: Turn, stepId: number | null): boolean {
 
 const BORDER: Record<Turn['kind'], string> = {
   preflight: 'border-l-gray-300',
-  agent: 'border-l-indigo-400',
+  agent: 'border-l-slate-400',
   final: 'border-l-green-500',
 }
 

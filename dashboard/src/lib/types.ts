@@ -67,6 +67,17 @@ export interface WorkflowDetail {
   steps: Step[]
 }
 
+export interface WorkflowSummary {
+  workflow_id: string
+  name: string
+  status: WorkflowStatus
+  created_at: number
+  updated_at: number
+  recovery_attempts: number | null
+  step_count: number
+  input?: string
+}
+
 export type TurnKind = 'preflight' | 'agent' | 'final'
 
 export interface Turn {

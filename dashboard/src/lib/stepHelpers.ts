@@ -82,6 +82,19 @@ export function formatDuration(ms: number): string {
   return `${m}m ${rem}s`
 }
 
+export function formatRelativeTime(epochMs: number): string {
+  const diffMs = Date.now() - epochMs
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMins / 60)
+  const diffDays = Math.floor(diffHours / 24)
+
+  if (diffMins < 1) return 'just now'
+  if (diffMins < 60) return `${diffMins} min ago`
+  if (diffHours < 24) return `${diffHours}h ago`
+  if (diffDays === 1) return 'yesterday'
+  return `${diffDays} days ago`
+}
+
 export function formatTimestamp(epochMs: number): string {
   return new Date(epochMs).toLocaleString('en-US', {
     month: 'long',
