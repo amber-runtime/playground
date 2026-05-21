@@ -1,8 +1,8 @@
-import type { Step, Turn } from '../lib/types'
+import type { StepWithTiming, Turn } from '../lib/types'
 import { getStepKind, humanizeStepName, formatDuration, stepDurationMs } from '../lib/stepHelpers'
 
 interface Props {
-  steps: Step[]
+  steps: StepWithTiming[]
   turns: Turn[]
   workflowStart: number
   workflowEnd: number
@@ -79,7 +79,7 @@ export function GanttStrip({
 
         {/* Chart area — one row per step, staircase layout */}
         <div className="relative" style={{ height: `${chartHeight}px` }}>
-          {/* Turn background bands — full chart height */}
+          {/* Turn background bands */}
           {turns.map((turn) => {
             const bandStart = turn.startedAtMs
             const bandEnd = turn.endedAtMs ?? workflowEnd
@@ -133,20 +133,20 @@ export function GanttStrip({
             )
           })}
 
-          {/* Step bars — one per row, staggered down-right */}
+          {/* Step bars */}
           {steps.map((step, index) => {
             const kind = getStepKind(step.function_name)
-            const isActive = step.function_id === activeStepId
+            const isActive = step.step_id === activeStepId
             const hasError = !!step.error
 
             const topPx = index * (ROW_HEIGHT + ROW_GAP)
-            const leftPct =
-              ((step.started_at_epoch_ms - workflowStart) / totalDuration) * 100
+            const stepStart = step.started_at_epoch_ms ?? workflowStart
+            const leftPct = ((stepStart - workflowStart) / totalDuration) * 100
 
             const durMs =
               step.completed_at_epoch_ms != null
-                ? step.completed_at_epoch_ms - step.started_at_epoch_ms
-                : workflowEnd - step.started_at_epoch_ms
+                ? step.completed_at_epoch_ms - stepStart
+                : workflowEnd - stepStart
 
             const widthPct = Math.max((durMs / totalDuration) * 100, 0.5)
 
@@ -162,10 +162,10 @@ export function GanttStrip({
 
             return (
               <div
-                key={step.function_id}
+                key={step.step_id ?? index}
                 className="absolute z-[2] group cursor-pointer"
                 style={{ top: `${topPx}px`, height: `${ROW_HEIGHT}px`, left: `${leftPct}%`, width: `${widthPct}%` }}
-                onClick={() => onStepClick(step.function_id)}
+                onClick={() => step.step_id != null && onStepClick(step.step_id)}
                 title={tooltip}
               >
                 <div

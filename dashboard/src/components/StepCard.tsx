@@ -12,20 +12,11 @@ import {
   XCircle,
   Loader2,
 } from 'lucide-react'
-import Markdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import type { Step, LLMFunctionCallItem, LLMMessageItem } from '../lib/types'
-import {
-  getStepKind,
-  humanizeStepName,
-  formatDuration,
-  parseSearchWebOutput,
-  isLLMOutput,
-  stepDurationMs,
-} from '../lib/stepHelpers'
+import type { StepWithTiming } from '../lib/types'
+import { getStepKind, humanizeStepName, formatDuration, stepDurationMs } from '../lib/stepHelpers'
 
 interface Props {
-  step: Step
+  step: StepWithTiming
   index: number
   isActive: boolean
 }
@@ -47,7 +38,7 @@ function CopyInline({ text }: { text: string }) {
   )
 }
 
-function StepIcon({ functionName }: { functionName: string }) {
+function StepIcon({ functionName }: { functionName: string | null }) {
   const kind = getStepKind(functionName)
   const cls = 'shrink-0'
   if (kind === 'llm') return <Brain size={15} className={`${cls} text-slate-400`} />
@@ -56,7 +47,7 @@ function StepIcon({ functionName }: { functionName: string }) {
   return <Wrench size={15} className={`${cls} text-sky-400`} />
 }
 
-function StatusDot({ step }: { step: Step }) {
+function StatusDot({ step }: { step: StepWithTiming }) {
   if (step.error)
     return <XCircle size={14} className="text-red-400 shrink-0" />
   if (step.completed_at_epoch_ms == null)
@@ -64,112 +55,59 @@ function StatusDot({ step }: { step: Step }) {
   return <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
 }
 
-function LLMStepBody({ step }: { step: Step }) {
-  if (!isLLMOutput(step.output)) return null
-  const { output: items, usage, response_id, model } = step.output
-
+function LLMStepBody({ step }: { step: StepWithTiming }) {
   return (
     <div className="space-y-3">
-      {/* Metadata row */}
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400 font-mono bg-slate-800 rounded px-3 py-2">
-        {model && <span className="text-slate-300">{model}</span>}
-        <span>{usage.input_tokens.toLocaleString()} in</span>
-        <span>{usage.output_tokens.toLocaleString()} out</span>
-        <span className="text-slate-200 font-semibold">{usage.total_tokens.toLocaleString()} total</span>
-        <span className="text-slate-500 ml-auto flex items-center">
-          {response_id.slice(0, 28)}…
-          <CopyInline text={response_id} />
-        </span>
+        {step.llm_model && <span className="text-slate-300">{step.llm_model}</span>}
+        {step.tokens_in != null && <span>{step.tokens_in.toLocaleString()} in</span>}
+        {step.tokens_out != null && <span>{step.tokens_out.toLocaleString()} out</span>}
+        {step.tokens_in != null && step.tokens_out != null && (
+          <span className="text-slate-200 font-semibold">
+            {(step.tokens_in + step.tokens_out).toLocaleString()} total
+          </span>
+        )}
+        {step.provider_response_id && (
+          <span className="text-slate-500 ml-auto flex items-center">
+            {step.provider_response_id.slice(0, 28)}…
+            <CopyInline text={step.provider_response_id} />
+          </span>
+        )}
       </div>
-
-      {/* Output items */}
-      {items.map((item, i) => {
-        if (item.type === 'function_call') {
-          const fc = item as LLMFunctionCallItem
-          let parsed: unknown = fc.arguments
-          try {
-            parsed = JSON.parse(fc.arguments)
-          } catch {
-            // leave as string
-          }
-          return (
-            <div key={i} className="flex items-start gap-2 text-sm">
-              <span className="text-slate-500 mt-0.5 shrink-0">→</span>
-              <span>
-                <span className="text-slate-400">Requested </span>
-                <code className="font-mono text-slate-300 text-xs bg-slate-800 px-1 py-0.5 rounded">
-                  {fc.name}
-                </code>
-                <pre className="mt-1.5 text-xs bg-slate-800 rounded p-2 overflow-x-auto text-slate-300 font-mono leading-relaxed">
-                  {typeof parsed === 'object'
-                    ? JSON.stringify(parsed, null, 2)
-                    : String(parsed)}
-                </pre>
-              </span>
-            </div>
-          )
-        }
-
-        if (item.type === 'message') {
-          const msg = item as LLMMessageItem
-          const text = msg.content?.[0]?.text
-          if (!text) return null
-          return (
-            <div key={i}>
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
-                Final Answer Generation
-              </p>
-              <div className="prose text-sm text-slate-300 max-w-none">
-                <Markdown remarkPlugins={[remarkGfm]}>{text}</Markdown>
-              </div>
-            </div>
-          )
-        }
-
-        return null
-      })}
-    </div>
-  )
-}
-
-function SearchWebBody({ output }: { output: string }) {
-  const results = parseSearchWebOutput(output)
-  if (results.length === 0) {
-    return <pre className="text-xs font-mono bg-slate-800 text-slate-300 rounded p-3 overflow-x-auto">{output}</pre>
-  }
-  return (
-    <div className="space-y-3">
-      {results.map((r, i) => (
-        <div key={i} className="border border-slate-800 rounded-lg px-4 py-3 space-y-1">
-          <p className="text-sm font-medium text-slate-200">{r.title}</p>
-          <a
-            href={r.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-amber-400 hover:text-amber-300 hover:underline block truncate"
-          >
-            {r.url}
-          </a>
-          <p className="text-xs text-slate-400 leading-relaxed">{r.summary}</p>
+      {step.tool_args != null && (
+        <div className="flex items-start gap-2 text-sm">
+          <span className="text-slate-500 mt-0.5 shrink-0">→</span>
+          <span>
+            <span className="text-slate-400">Requested </span>
+            <code className="font-mono text-slate-300 text-xs bg-slate-800 px-1 py-0.5 rounded">
+              {step.tool_name ?? 'tool'}
+            </code>
+            <pre className="mt-1.5 text-xs bg-slate-800 rounded p-2 overflow-x-auto text-slate-300 font-mono leading-relaxed">
+              {JSON.stringify(step.tool_args, null, 2)}
+            </pre>
+          </span>
         </div>
-      ))}
+      )}
     </div>
   )
 }
 
-function OtherToolBody({ step }: { step: Step }) {
-  const payload = {
-    output: step.output,
-    error: step.error,
+function ToolStepBody({ step }: { step: StepWithTiming }) {
+  if (step.tool_args != null) {
+    return (
+      <pre className="text-xs font-mono bg-slate-800 rounded p-3 overflow-x-auto text-slate-300 leading-relaxed">
+        {JSON.stringify(step.tool_args, null, 2)}
+      </pre>
+    )
   }
   return (
-    <pre className="text-xs font-mono bg-slate-800 rounded p-3 overflow-x-auto text-slate-300 leading-relaxed">
-      {JSON.stringify(payload, null, 2)}
-    </pre>
+    <p className="text-sm text-slate-500 italic">
+      Tool output not available{step.tool_match_status === 'ambiguous' ? ' (multiple calls — ambiguous match)' : ''}.
+    </p>
   )
 }
 
-function SleepBody({ step }: { step: Step }) {
+function SleepBody({ step }: { step: StepWithTiming }) {
   const dur = stepDurationMs(step)
   return (
     <p className="text-sm text-slate-500 italic">
@@ -178,18 +116,11 @@ function SleepBody({ step }: { step: Step }) {
   )
 }
 
-function ExpandedBody({ step }: { step: Step }) {
+function ExpandedBody({ step }: { step: StepWithTiming }) {
   const kind = getStepKind(step.function_name)
-
   if (kind === 'llm') return <LLMStepBody step={step} />
-
   if (kind === 'sleep') return <SleepBody step={step} />
-
-  if (step.function_name === 'search_web' && typeof step.output === 'string') {
-    return <SearchWebBody output={step.output} />
-  }
-
-  return <OtherToolBody step={step} />
+  return <ToolStepBody step={step} />
 }
 
 export function StepCard({ step, index, isActive }: Props) {

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
-import type { Turn } from '../lib/types'
-import { formatDuration, humanizeStepName, isLLMOutput } from '../lib/stepHelpers'
+import type { Turn, StepWithTiming } from '../lib/types'
+import { formatDuration, humanizeStepName } from '../lib/stepHelpers'
 import { StepCard } from './StepCard'
 
 interface Props {
@@ -33,11 +33,12 @@ function FinalBadge() {
   )
 }
 
-function ToolSummary({ toolSteps }: { toolSteps: Turn['toolSteps'] }) {
+function ToolSummary({ toolSteps }: { toolSteps: StepWithTiming[] }) {
   if (toolSteps.length === 0) return null
   const counts: Record<string, number> = {}
   for (const s of toolSteps) {
-    counts[s.function_name] = (counts[s.function_name] ?? 0) + 1
+    const name = s.function_name ?? 'unknown'
+    counts[name] = (counts[name] ?? 0) + 1
   }
   const parts = Object.entries(counts).map(([name, n]) => {
     const label = humanizeStepName(name)
@@ -51,17 +52,18 @@ function ToolSummary({ toolSteps }: { toolSteps: Turn['toolSteps'] }) {
 }
 
 function LLMStats({ turn }: { turn: Turn }) {
-  if (!turn.llmStep || !isLLMOutput(turn.llmStep.output)) return null
-  const { usage, model } = turn.llmStep.output
+  if (!turn.llmStep) return null
+  const { llm_model, tokens_in, tokens_out } = turn.llmStep
+  if (tokens_in == null && tokens_out == null) return null
   return (
     <>
-      {model && (
-        <span className="text-xs text-slate-500 font-mono hidden sm:inline">{model}</span>
+      {llm_model && (
+        <span className="text-xs text-slate-500 font-mono hidden sm:inline">{llm_model}</span>
       )}
       <span className="text-xs text-slate-400 font-mono shrink-0">
-        {usage.input_tokens.toLocaleString()}
+        {(tokens_in ?? 0).toLocaleString()}
         <span className="text-slate-700 mx-0.5">→</span>
-        {usage.output_tokens.toLocaleString()}
+        {(tokens_out ?? 0).toLocaleString()}
         <span className="text-slate-500 ml-0.5">tok</span>
       </span>
     </>
@@ -70,8 +72,8 @@ function LLMStats({ turn }: { turn: Turn }) {
 
 function turnContainsStep(turn: Turn, stepId: number | null): boolean {
   if (stepId == null) return false
-  if (turn.llmStep?.function_id === stepId) return true
-  return turn.toolSteps.some((s) => s.function_id === stepId)
+  if (turn.llmStep?.step_id === stepId) return true
+  return turn.toolSteps.some((s) => s.step_id === stepId)
 }
 
 const BORDER: Record<Turn['kind'], string> = {
@@ -146,17 +148,17 @@ export function TurnGroup({ turn, activeStepId }: Props) {
           {turn.llmStep && (
             <StepCard
               step={turn.llmStep}
-              index={turn.llmStep.function_id - 1}
-              isActive={turn.llmStep.function_id === activeStepId}
+              index={turn.llmStep.step_id != null ? turn.llmStep.step_id - 1 : 0}
+              isActive={turn.llmStep.step_id === activeStepId}
             />
           )}
 
           {turn.toolSteps.map((step) => (
-            <div key={step.function_id} className="ml-8">
+            <div key={step.step_id ?? step.function_name} className="ml-8">
               <StepCard
                 step={step}
-                index={step.function_id - 1}
-                isActive={step.function_id === activeStepId}
+                index={step.step_id != null ? step.step_id - 1 : 0}
+                isActive={step.step_id === activeStepId}
               />
             </div>
           ))}

@@ -7,11 +7,11 @@ import {
   formatDuration,
   sumTokens,
 } from '../lib/stepHelpers'
-import type { Step } from '../lib/types'
+import type { StepWithTiming } from '../lib/types'
 
 interface Props {
   workflow: WorkflowInfo
-  steps: Step[]
+  steps: StepWithTiming[]
 }
 
 const STATUS_STYLES: Record<WorkflowStatus, string> = {
