@@ -49,8 +49,8 @@ class QueryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(records[0]["tool_name"], "lookup")
         self.assertIsNone(records[0]["tool_args"])
-        self.assertEqual(records[0]["tool_match_status"], "ambiguous")
-        self.assertEqual(records[1]["tool_match_status"], "ambiguous")
+        self.assertEqual(records[0]["event_type"], "step")
+        self.assertEqual(records[1]["event_type"], "step")
 
     def test_build_step_records_attaches_single_unambiguous_null_step_tool(self):
         steps = [{"function_id": 1, "function_name": "lookup", "error": None}]
@@ -67,7 +67,7 @@ class QueryTests(unittest.IsolatedAsyncioTestCase):
         records = queries.build_step_records(steps, events)
 
         self.assertEqual(records[0]["tool_args"], {"q": "a"})
-        self.assertIsNone(records[0]["tool_match_status"])
+        self.assertEqual(records[0]["event_type"], "tool_call")
 
     def test_build_step_records_tolerates_missing_dbos_keys(self):
         records = queries.build_step_records([{"error": None}], [])
@@ -75,6 +75,7 @@ class QueryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(records[0]["status"], "SUCCESS")
         self.assertIsNone(records[0]["step_id"])
         self.assertIsNone(records[0]["function_name"])
+        self.assertEqual(records[0]["event_type"], "step")
 
     def test_build_step_records_carries_llm_raw_io(self):
         steps = [{"function_id": 1, "function_name": "_model_call_step", "error": None}]
@@ -86,16 +87,53 @@ class QueryTests(unittest.IsolatedAsyncioTestCase):
                 "model": "gpt-5.4-mini",
                 "tokens_in": 10,
                 "tokens_out": 5,
-                "provider_response_id": "resp_123",
                 "llm_input": [{"role": "user", "content": [{"type": "input_text", "text": "hi"}]}],
                 "llm_output": [{"type": "message", "id": "msg_123"}],
+                "captured_at": "2026-05-21T12:00:00Z",
             }
         ]
 
         records = queries.build_step_records(steps, events)
 
+        self.assertEqual(records[0]["event_type"], "llm_response")
         self.assertEqual(records[0]["llm_input"], events[0]["llm_input"])
         self.assertEqual(records[0]["llm_output"], events[0]["llm_output"])
+        self.assertEqual(records[0]["captured_at"], events[0]["captured_at"])
+
+    def test_build_step_records_carries_agent_name_for_llm_steps(self):
+        steps = [{"function_id": 1, "function_name": "_model_call_step", "error": None}]
+        events = [
+            {
+                "span_id": "span-1",
+                "step_id": 1,
+                "event_type": "llm_response",
+                "agent_name": "flight_researcher",
+            }
+        ]
+
+        records = queries.build_step_records(steps, events)
+
+        self.assertEqual(records[0]["agent_name"], "flight_researcher")
+
+    def test_build_step_records_carries_tool_result_and_timestamp_for_tool_steps(self):
+        steps = [{"function_id": 6, "function_name": "get_flight_quotes", "error": None}]
+        events = [
+            {
+                "span_id": "span-6",
+                "step_id": 6,
+                "event_type": "tool_call",
+                "tool_name": "get_flight_quotes",
+                "tool_args": {"origin": "SFO"},
+                "tool_result": "best flight selected",
+                "captured_at": "2026-05-21T12:00:01Z",
+            }
+        ]
+
+        records = queries.build_step_records(steps, events)
+
+        self.assertEqual(records[0]["event_type"], "tool_call")
+        self.assertEqual(records[0]["tool_result"], "best flight selected")
+        self.assertEqual(records[0]["captured_at"], "2026-05-21T12:00:01Z")
 
     async def test_fetch_agent_events_for_dashboard_swallows_read_failures(self):
         with (
@@ -142,6 +180,15 @@ def install_tracing_stubs():
     class TracingProcessor:
         pass
 
+    class AgentSpanData:
+        def __init__(self, name=None, handoffs=None, tools=None, output_type=None, metadata=None):
+            self.name = name
+
+    class TurnSpanData:
+        def __init__(self, turn=None, agent_name=None, usage=None, metadata=None):
+            self.turn = turn
+            self.agent_name = agent_name
+
     class FunctionSpanData:
         def __init__(self, name=None, input=None, output=None):
             self.name = name
@@ -170,10 +217,12 @@ def install_tracing_stubs():
         step_id = 7
 
     processor_interface.TracingProcessor = TracingProcessor
+    span_data.AgentSpanData = AgentSpanData
     span_data.FunctionSpanData = FunctionSpanData
     span_data.GenerationSpanData = GenerationSpanData
     span_data.HandoffSpanData = HandoffSpanData
     span_data.ResponseSpanData = ResponseSpanData
+    span_data.TurnSpanData = TurnSpanData
     dbos.DBOS = DBOS
     tracing_pkg.add_trace_processor = mock.Mock()
 
@@ -184,6 +233,8 @@ def install_tracing_stubs():
     sys.modules["dbos"] = dbos
 
     return (
+        AgentSpanData,
+        TurnSpanData,
         FunctionSpanData,
         GenerationSpanData,
         ResponseSpanData,
@@ -508,6 +559,8 @@ class DemoRegistrationTests(unittest.TestCase):
 class TracingTests(unittest.TestCase):
     def setUp(self):
         (
+            self.AgentSpanData,
+            self.TurnSpanData,
             self.FunctionSpanData,
             self.GenerationSpanData,
             self.ResponseSpanData,
@@ -586,6 +639,50 @@ class TracingTests(unittest.TestCase):
         self.assertEqual(record["llm_input"], span.span_data.input)
         self.assertEqual(record["llm_output"], response.output)
         self.assertEqual(record["provider_response_id"], "resp_123")
+
+    def test_response_span_inherits_agent_name_from_turn_span(self):
+        processor = self.tracing.CheckpointTracingProcessor("postgresql://db")
+        turn_span = types.SimpleNamespace(
+            span_id="turn-1",
+            parent_id=None,
+            span_data=self.TurnSpanData(turn=1, agent_name="flight_researcher"),
+        )
+        response = types.SimpleNamespace(id="resp_123", model="gpt-5.4-mini", output=[])
+        llm_span = types.SimpleNamespace(
+            span_id="span-1",
+            parent_id="turn-1",
+            span_data=self.ResponseSpanData(response=response, input=[], usage={}),
+        )
+
+        processor.on_span_start(turn_span)
+        processor.on_span_start(llm_span)
+        with mock.patch.object(self.tracing, "_write_agent_event") as write:
+            processor.on_span_end(llm_span)
+
+        record = write.call_args.args[1]
+        self.assertEqual(record["agent_name"], "flight_researcher")
+
+    def test_response_span_falls_back_to_agent_span_name(self):
+        processor = self.tracing.CheckpointTracingProcessor("postgresql://db")
+        agent_span = types.SimpleNamespace(
+            span_id="agent-1",
+            parent_id=None,
+            span_data=self.AgentSpanData(name="flight_researcher"),
+        )
+        response = types.SimpleNamespace(id="resp_123", model="gpt-5.4-mini", output=[])
+        llm_span = types.SimpleNamespace(
+            span_id="span-1",
+            parent_id="agent-1",
+            span_data=self.ResponseSpanData(response=response, input=[], usage={}),
+        )
+
+        processor.on_span_start(agent_span)
+        processor.on_span_start(llm_span)
+        with mock.patch.object(self.tracing, "_write_agent_event") as write:
+            processor.on_span_end(llm_span)
+
+        record = write.call_args.args[1]
+        self.assertEqual(record["agent_name"], "flight_researcher")
 
     def test_to_json_compatible_handles_model_dump_and_lists(self):
         class FakeModel:

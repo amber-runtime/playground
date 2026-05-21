@@ -24,10 +24,12 @@ import psycopg2.extras
 import psycopg2.pool
 from agents.tracing.processor_interface import TracingProcessor
 from agents.tracing.span_data import (
+    AgentSpanData,
     FunctionSpanData,
     GenerationSpanData,
     HandoffSpanData,
     ResponseSpanData,
+    TurnSpanData,
 )
 from dbos import DBOS
 
@@ -55,6 +57,7 @@ CREATE TABLE IF NOT EXISTS agent_events (
     tokens_in            INTEGER      NULL,
     tokens_out           INTEGER      NULL,
     provider_response_id TEXT         NULL,
+    agent_name           TEXT         NULL,
     llm_input            JSONB        NULL,
     llm_output           JSONB        NULL,
     tool_name            TEXT         NULL,
@@ -149,7 +152,7 @@ def _write_agent_event(db_url: str, record: dict[str, Any]) -> None:
                 """
                 INSERT INTO agent_events (
                     event_key, span_id, workflow_id, step_id, event_type,
-                    model, tokens_in, tokens_out, provider_response_id,
+                    model, tokens_in, tokens_out, provider_response_id, agent_name,
                     llm_input, llm_output,
                     tool_name, tool_args, tool_result,
                     from_agent, to_agent
@@ -166,6 +169,7 @@ def _write_agent_event(db_url: str, record: dict[str, Any]) -> None:
                     record.get("tokens_in"),
                     record.get("tokens_out"),
                     record.get("provider_response_id"),
+                    record.get("agent_name"),
                     psycopg2.extras.Json(record["llm_input"]) if record.get("llm_input") is not None else None,
                     psycopg2.extras.Json(record["llm_output"]) if record.get("llm_output") is not None else None,
                     record.get("tool_name"),
@@ -196,7 +200,11 @@ class CheckpointTracingProcessor(TracingProcessor):
     def __init__(self, db_url: str) -> None:
         self._db_url = db_url
         self._span_step_ids: dict[str, int | None] = {}
+        self._span_parent_ids: dict[str, str | None] = {}
+        self._span_agent_names: dict[str, str | None] = {}
         self._span_step_ids_lock = threading.Lock()
+        self._span_parent_ids_lock = threading.Lock()
+        self._span_agent_names_lock = threading.Lock()
 
     def on_trace_start(self, trace: Any) -> None:
         pass
@@ -210,6 +218,12 @@ class CheckpointTracingProcessor(TracingProcessor):
             return
         with self._span_step_ids_lock:
             self._span_step_ids[span_id] = _current_step_id()
+        parent_id = getattr(span, "parent_id", None)
+        with self._span_parent_ids_lock:
+            self._span_parent_ids[span_id] = parent_id
+        agent_name = self._resolve_agent_name(span, parent_id)
+        with self._span_agent_names_lock:
+            self._span_agent_names[span_id] = agent_name
 
     def on_span_end(self, span: Any) -> None:
         try:
@@ -237,6 +251,7 @@ class CheckpointTracingProcessor(TracingProcessor):
                     "tokens_in":            usage.get("input_tokens"),
                     "tokens_out":           usage.get("output_tokens"),
                     "provider_response_id": data.response.id if data.response else None,
+                    "agent_name":           self._get_agent_name(span.span_id),
                     "llm_input":            _to_json_compatible(data.input),
                     "llm_output":           _to_json_compatible(getattr(data.response, "output", None)),
                 }
@@ -260,6 +275,8 @@ class CheckpointTracingProcessor(TracingProcessor):
             span_id = span.span_id
             if record is None:
                 self._pop_started_step_id(span_id)
+                self._pop_parent_id(span_id)
+                self._pop_agent_name(span_id)
                 return
 
             step_id = self._pop_started_step_id(span_id)
@@ -271,6 +288,8 @@ class CheckpointTracingProcessor(TracingProcessor):
             record["step_id"]     = step_id
             record["event_key"]   = _event_key(record, span)
             _write_agent_event(self._db_url, record)
+            self._pop_parent_id(span_id)
+            self._pop_agent_name(span_id)
 
         except Exception:
             logger.exception("CheckpointTracingProcessor: failed to write event, continuing")
@@ -287,6 +306,28 @@ class CheckpointTracingProcessor(TracingProcessor):
     def _pop_started_step_id(self, span_id: str) -> int | None:
         with self._span_step_ids_lock:
             return self._span_step_ids.pop(span_id, None)
+
+    def _pop_parent_id(self, span_id: str) -> str | None:
+        with self._span_parent_ids_lock:
+            return self._span_parent_ids.pop(span_id, None)
+
+    def _get_agent_name(self, span_id: str) -> str | None:
+        with self._span_agent_names_lock:
+            return self._span_agent_names.get(span_id)
+
+    def _pop_agent_name(self, span_id: str) -> str | None:
+        with self._span_agent_names_lock:
+            return self._span_agent_names.pop(span_id, None)
+
+    def _resolve_agent_name(self, span: Any, parent_id: str | None) -> str | None:
+        data = getattr(span, "span_data", None)
+        if isinstance(data, TurnSpanData):
+            return data.agent_name
+        if isinstance(data, AgentSpanData):
+            return data.name
+        if parent_id is None:
+            return None
+        return self._get_agent_name(parent_id)
 
 
 def _event_key(record: dict[str, Any], span: Any) -> str:

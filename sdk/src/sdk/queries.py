@@ -68,7 +68,7 @@ def fetch_agent_events(workflow_id: str, db_url: str) -> list[dict]:
             cur.execute(
                 """
                 SELECT span_id, step_id, event_type,
-                       model, tokens_in, tokens_out, provider_response_id,
+                       model, tokens_in, tokens_out, provider_response_id, agent_name,
                        llm_input, llm_output,
                        tool_name, tool_args, tool_result,
                        from_agent, to_agent, captured_at
@@ -133,7 +133,6 @@ def build_step_records(
                     if tool_name:
                         unmatched_tools.setdefault(tool_name, []).append(event)
 
-    unmatched_tool_status_by_step: dict[int, str] = {}
     candidate_steps_by_name: dict[str, list[int]] = {}
     for step in steps:
         step_id = step.get("function_id")
@@ -145,9 +144,6 @@ def build_step_records(
         candidates = candidate_steps_by_name.get(tool_name, [])
         if len(events) == 1 and len(candidates) == 1:
             tool_by_step[candidates[0]] = events[0]
-        else:
-            for step_id in candidates:
-                unmatched_tool_status_by_step[step_id] = "ambiguous"
 
     records = []
     for step in steps:
@@ -159,22 +155,30 @@ def build_step_records(
 
         llm = llm_by_step.get(step_id, {})
         tool = tool_by_step.get(step_id, {})
+        event = llm if llm else tool
+        event_type = "step"
+        if llm:
+            event_type = "llm_response"
+        elif tool:
+            event_type = "tool_call"
 
         records.append({
             "step_id":               step_id,
             "function_name":         fn_name,
+            "event_type":            event_type,
             "status":                "SUCCESS" if step.get("error") is None else "ERROR",
             "duration_ms":           duration_ms,
             # LLM fields — populated for _model_call_step rows
             "llm_model":             llm.get("model"),
             "tokens_in":             llm.get("tokens_in"),
             "tokens_out":            llm.get("tokens_out"),
-            "provider_response_id":  llm.get("provider_response_id"),
+            "agent_name":            llm.get("agent_name"),
             "llm_input":             llm.get("llm_input"),
             "llm_output":            llm.get("llm_output"),
             # Tool fields — populated for tool step rows
             "tool_name":             tool.get("tool_name") or fn_name,
             "tool_args":             tool.get("tool_args"),
-            "tool_match_status":     unmatched_tool_status_by_step.get(step_id),
+            "tool_result":           tool.get("tool_result"),
+            "captured_at":           event.get("captured_at"),
         })
     return records
