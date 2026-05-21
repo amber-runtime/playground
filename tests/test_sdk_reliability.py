@@ -130,6 +130,81 @@ def install_tracing_stubs():
     return FunctionSpanData, DBOS, tracing_pkg.add_trace_processor
 
 
+def install_decorator_stubs():
+    dbos = types.ModuleType("dbos")
+    dbos_openai_agents = types.ModuleType("dbos_openai_agents")
+
+    class DBOS:
+        logger = mock.Mock()
+
+        def __init__(self, config=None):
+            self.config = config
+
+        @staticmethod
+        def workflow(name=None, max_recovery_attempts=None):
+            def decorator(fn):
+                fn._dbos_workflow_name = name
+                fn._dbos_max_recovery_attempts = max_recovery_attempts
+                return fn
+
+            return decorator
+
+        @staticmethod
+        def step(**_kwargs):
+            def decorator(fn):
+                return fn
+
+            return decorator
+
+    class DBOSRunner:
+        pass
+
+    dbos.DBOS = DBOS
+    dbos.DBOSConfig = dict
+    dbos_openai_agents.DBOSRunner = DBOSRunner
+
+    sys.modules["dbos"] = dbos
+    sys.modules["dbos_openai_agents"] = dbos_openai_agents
+
+
+class AgentRegistryTests(unittest.TestCase):
+    def setUp(self):
+        install_decorator_stubs()
+        self.decorators = load_module("decorators_registry_under_test", "sdk/src/sdk/decorators.py")
+
+    def test_agent_decorator_registers_named_workflow(self):
+        async def run_topic(topic: str) -> str:
+            return topic
+
+        workflow_fn = self.decorators.agent(name="research-assistant")(run_topic)
+
+        registered = self.decorators.get_registered_agent("research-assistant")
+        self.assertEqual(registered.name, "research-assistant")
+        self.assertIs(registered.workflow, workflow_fn)
+        self.assertEqual(workflow_fn._dbos_workflow_name, "research-assistant")
+
+    def test_agent_decorator_rejects_duplicate_names(self):
+        self.decorators.agent(name="research-assistant")(lambda value: value)
+
+        with self.assertRaisesRegex(ValueError, "already registered"):
+            self.decorators.agent(name="research-assistant")(lambda value: value)
+
+    def test_get_registered_agent_reports_available_names(self):
+        self.decorators.agent(name="research-assistant")(lambda value: value)
+
+        with self.assertRaisesRegex(ValueError, "research-assistant"):
+            self.decorators.get_registered_agent("missing-agent")
+
+    def test_list_registered_agents_is_sorted_by_name(self):
+        self.decorators.agent(name="zeta")(lambda value: value)
+        self.decorators.agent(name="alpha")(lambda value: value)
+
+        self.assertEqual(
+            [agent.name for agent in self.decorators.list_registered_agents()],
+            ["alpha", "zeta"],
+        )
+
+
 class TracingTests(unittest.TestCase):
     def setUp(self):
         self.FunctionSpanData, self.DBOS, self.add_trace_processor = install_tracing_stubs()

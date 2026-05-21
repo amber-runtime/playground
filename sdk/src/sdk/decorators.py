@@ -3,10 +3,20 @@ import functools
 import os
 import time
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from typing import Any
 
 from dbos import DBOS, DBOSConfig
 from dbos_openai_agents import DBOSRunner
+
+
+@dataclass(frozen=True)
+class RegisteredAgent:
+    name: str
+    workflow: Callable[..., Any]
+
+
+_registered_agents: dict[str, RegisteredAgent] = {}
 
 
 def workflow(
@@ -15,6 +25,45 @@ def workflow(
     max_recovery_attempts: int | None = 5,
 ):
     return DBOS.workflow(name=name, max_recovery_attempts=max_recovery_attempts)
+
+
+def agent(
+    *,
+    name: str,
+    max_recovery_attempts: int | None = 5,
+):
+    if not name:
+        raise ValueError("Agent name must be a non-empty string.")
+
+    def decorator(fn: Callable[..., Any]):
+        if name in _registered_agents:
+            raise ValueError(f"Agent {name!r} is already registered.")
+
+        workflow_fn = workflow(
+            name=name,
+            max_recovery_attempts=max_recovery_attempts,
+        )(fn)
+        _registered_agents[name] = RegisteredAgent(name=name, workflow=workflow_fn)
+        return workflow_fn
+
+    return decorator
+
+
+def get_registered_agent(name: str) -> RegisteredAgent:
+    try:
+        return _registered_agents[name]
+    except KeyError:
+        registered = ", ".join(sorted(_registered_agents)) or "none"
+        raise ValueError(
+            f"Agent {name!r} is not registered. Registered agents: {registered}."
+        ) from None
+
+
+def list_registered_agents() -> list[RegisteredAgent]:
+    return [
+        _registered_agents[name]
+        for name in sorted(_registered_agents)
+    ]
 
 
 def step(
