@@ -22,8 +22,8 @@ export function StepTimeline({ workflow, steps }: Props) {
 
   if (steps.length === 0) {
     return (
-      <div className="bg-white border border-gray-200 rounded-lg px-5 py-8 text-center">
-        <p className="text-sm text-gray-400">No steps recorded yet.</p>
+      <div className="bg-slate-900 border border-slate-800 rounded-lg px-5 py-8 text-center">
+        <p className="text-sm text-slate-500">No steps recorded yet.</p>
       </div>
     )
   }

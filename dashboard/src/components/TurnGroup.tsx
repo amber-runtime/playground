@@ -9,11 +9,9 @@ interface Props {
   activeStepId: number | null
 }
 
-// ── Turn header badges ─────────────────────────────────────────────────────────
-
 function PreflightBadge() {
   return (
-    <span className="shrink-0 px-2 py-0.5 rounded text-xs font-semibold bg-gray-100 text-gray-500 ring-1 ring-gray-200">
+    <span className="shrink-0 px-2 py-0.5 rounded text-xs font-semibold bg-slate-800 text-slate-400 ring-1 ring-slate-700">
       Pre-flight
     </span>
   )
@@ -21,7 +19,7 @@ function PreflightBadge() {
 
 function AgentBadge({ number }: { number: number }) {
   return (
-    <span className="shrink-0 px-2 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-700 ring-1 ring-slate-200">
+    <span className="shrink-0 px-2 py-0.5 rounded text-xs font-semibold bg-slate-800 text-slate-300 ring-1 ring-slate-700">
       Turn {number}
     </span>
   )
@@ -29,13 +27,11 @@ function AgentBadge({ number }: { number: number }) {
 
 function FinalBadge() {
   return (
-    <span className="shrink-0 px-2 py-0.5 rounded text-xs font-semibold bg-green-50 text-green-700 ring-1 ring-green-200">
+    <span className="shrink-0 px-2 py-0.5 rounded text-xs font-semibold bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30">
       Final Answer
     </span>
   )
 }
-
-// ── Tool name summary (e.g. "search_web ×2") ──────────────────────────────────
 
 function ToolSummary({ toolSteps }: { toolSteps: Turn['toolSteps'] }) {
   if (toolSteps.length === 0) return null
@@ -48,13 +44,11 @@ function ToolSummary({ toolSteps }: { toolSteps: Turn['toolSteps'] }) {
     return n > 1 ? `${label} ×${n}` : label
   })
   return (
-    <span className="text-xs text-gray-400 truncate">
+    <span className="text-xs text-slate-500 truncate">
       {parts.join(', ')}
     </span>
   )
 }
-
-// ── LLM stats row ─────────────────────────────────────────────────────────────
 
 function LLMStats({ turn }: { turn: Turn }) {
   if (!turn.llmStep || !isLLMOutput(turn.llmStep.output)) return null
@@ -62,19 +56,17 @@ function LLMStats({ turn }: { turn: Turn }) {
   return (
     <>
       {model && (
-        <span className="text-xs text-gray-400 font-mono hidden sm:inline">{model}</span>
+        <span className="text-xs text-slate-500 font-mono hidden sm:inline">{model}</span>
       )}
-      <span className="text-xs text-gray-500 font-mono shrink-0">
+      <span className="text-xs text-slate-400 font-mono shrink-0">
         {usage.input_tokens.toLocaleString()}
-        <span className="text-gray-300 mx-0.5">→</span>
+        <span className="text-slate-700 mx-0.5">→</span>
         {usage.output_tokens.toLocaleString()}
-        <span className="text-gray-400 ml-0.5">tok</span>
+        <span className="text-slate-500 ml-0.5">tok</span>
       </span>
     </>
   )
 }
-
-// ── Active-step detection ──────────────────────────────────────────────────────
 
 function turnContainsStep(turn: Turn, stepId: number | null): boolean {
   if (stepId == null) return false
@@ -82,15 +74,11 @@ function turnContainsStep(turn: Turn, stepId: number | null): boolean {
   return turn.toolSteps.some((s) => s.function_id === stepId)
 }
 
-// ── Border color by kind ───────────────────────────────────────────────────────
-
 const BORDER: Record<Turn['kind'], string> = {
-  preflight: 'border-l-gray-300',
-  agent: 'border-l-slate-400',
-  final: 'border-l-green-500',
+  preflight: 'border-l-slate-600',
+  agent: 'border-l-slate-500',
+  final: 'border-l-emerald-500',
 }
-
-// ── Component ─────────────────────────────────────────────────────────────────
 
 export function TurnGroup({ turn, activeStepId }: Props) {
   const defaultExpanded = turn.kind !== 'preflight'
@@ -114,12 +102,12 @@ export function TurnGroup({ turn, activeStepId }: Props) {
 
   return (
     <div
-      className={`${borderWidth} ${BORDER[turn.kind]} bg-white border border-gray-200 rounded-lg overflow-hidden`}
+      className={`${borderWidth} ${BORDER[turn.kind]} bg-slate-900 border border-slate-800 rounded-lg overflow-hidden`}
     >
       {/* Header */}
       <button
         className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-left transition-colors ${
-          expanded ? 'bg-gray-50' : 'bg-white hover:bg-gray-50'
+          expanded ? 'bg-slate-800/50' : 'bg-slate-900 hover:bg-slate-800/50'
         }`}
         onClick={() => setExpanded((v) => !v)}
       >
@@ -135,18 +123,18 @@ export function TurnGroup({ turn, activeStepId }: Props) {
         {/* Right-side stats */}
         <div className="flex items-center gap-2 shrink-0">
           {turn.kind === 'preflight' && (
-            <span className="text-xs text-gray-400">
+            <span className="text-xs text-slate-500">
               {allSteps.length} step{allSteps.length !== 1 ? 's' : ''}
             </span>
           )}
           {hasRunning ? (
-            <span className="text-xs text-amber-500 font-medium">running…</span>
+            <span className="text-xs text-amber-400 font-medium">running…</span>
           ) : turn.totalDurationMs != null ? (
-            <span className="text-xs text-gray-400 font-mono">
+            <span className="text-xs text-slate-500 font-mono">
               {formatDuration(turn.totalDurationMs)}
             </span>
           ) : null}
-          <span className="text-gray-300">
+          <span className="text-slate-600">
             {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           </span>
         </div>
@@ -155,7 +143,6 @@ export function TurnGroup({ turn, activeStepId }: Props) {
       {/* Body */}
       {expanded && (
         <div className="px-3 pb-3 pt-2 space-y-2">
-          {/* LLM step */}
           {turn.llmStep && (
             <StepCard
               step={turn.llmStep}
@@ -164,7 +151,6 @@ export function TurnGroup({ turn, activeStepId }: Props) {
             />
           )}
 
-          {/* Tool steps — indented */}
           {turn.toolSteps.map((step) => (
             <div key={step.function_id} className="ml-8">
               <StepCard

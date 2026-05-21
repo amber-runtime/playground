@@ -1,14 +1,24 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { RefreshCw, CheckCircle2, XCircle } from 'lucide-react'
-import type { WorkflowSummary, WorkflowStatus } from '../lib/types'
-import { mockWorkflowList } from '../lib/mockData'
+import type { WorkflowSummary, WorkflowStatus, WorkflowDetail } from '../lib/types'
+import { useWorkflows } from '../lib/workflowContext'
+import { runMockWorkflow } from '../lib/mockWorkflowRunner'
+import { NewWorkflowButton } from '../components/NewWorkflowButton'
+import { NewWorkflowModal } from '../components/NewWorkflowModal'
+import { showToast } from '../components/Toast'
+import type { AgentDef } from '../lib/agentRegistry'
 import {
   humanizeWorkflowName,
   formatRelativeTime,
   formatDuration,
   extractWorkflowInputArg,
 } from '../lib/stepHelpers'
+
+// Render guard: button is visible in dev mode or when explicitly opted in via env var.
+// This flag is evaluated at module load time — no runtime cost in production.
+const SHOW_RUN_BUTTON =
+  import.meta.env.DEV || import.meta.env.VITE_SHOW_RUN_BUTTON === 'true'
 
 type Filter = 'all' | 'completed' | 'running' | 'errored'
 
@@ -28,7 +38,7 @@ const EMPTY_MESSAGES: Record<Filter, string> = {
 
 function StatusIcon({ status }: { status: WorkflowStatus }) {
   if (status === 'SUCCESS')
-    return <CheckCircle2 size={15} className="text-green-500 shrink-0" />
+    return <CheckCircle2 size={15} className="text-emerald-400 shrink-0" />
   if (status === 'PENDING')
     return (
       <span className="relative flex h-3 w-3 shrink-0 mt-0.5">
@@ -37,14 +47,14 @@ function StatusIcon({ status }: { status: WorkflowStatus }) {
       </span>
     )
   if (status === 'ERROR')
-    return <XCircle size={15} className="text-red-500 shrink-0" />
-  return <span className="w-3.5 h-3.5 rounded-full bg-gray-300 shrink-0" />
+    return <XCircle size={15} className="text-red-400 shrink-0" />
+  return <span className="w-3.5 h-3.5 rounded-full bg-slate-600 shrink-0" />
 }
 
 function RecoveryPill({ count }: { count: number }) {
   if (count <= 0) return null
   return (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 ring-1 ring-amber-200 whitespace-nowrap">
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30 whitespace-nowrap">
       Recovered {count}×
     </span>
   )
@@ -59,13 +69,15 @@ function workflowDuration(w: WorkflowSummary): string {
 
 export function WorkflowListPage() {
   const navigate = useNavigate()
+  const { workflows, prependWorkflow, updateSummary, setDetail } = useWorkflows()
   const [filter, setFilter] = useState<Filter>('all')
+  const [modalOpen, setModalOpen] = useState(false)
 
   const counts = {
-    all: mockWorkflowList.length,
-    completed: mockWorkflowList.filter((w) => w.status === 'SUCCESS').length,
-    running: mockWorkflowList.filter((w) => w.status === 'PENDING').length,
-    errored: mockWorkflowList.filter((w) => w.status === 'ERROR').length,
+    all: workflows.length,
+    completed: workflows.filter((w) => w.status === 'SUCCESS').length,
+    running: workflows.filter((w) => w.status === 'PENDING').length,
+    errored: workflows.filter((w) => w.status === 'ERROR').length,
   }
 
   const FILTER_LABELS: Record<Filter, string> = {
@@ -75,32 +87,76 @@ export function WorkflowListPage() {
     errored: `Errored (${counts.errored})`,
   }
 
-  const filtered = mockWorkflowList.filter((w) => {
+  const filtered = workflows.filter((w) => {
     const target = FILTER_STATUS[filter]
     return target === null || w.status === target
   })
 
+  const handleNewWorkflow = (agent: AgentDef, topic: string) => {
+    const id =
+      '019e3d' +
+      Math.random().toString(16).slice(2, 8) +
+      '...' +
+      Math.random().toString(16).slice(2, 6)
+    const now = Date.now()
+    const input = `{'args': ('${topic}',), 'kwargs': {}}`
+
+    const summary: WorkflowSummary = {
+      workflow_id: id,
+      name: agent.id,
+      status: 'PENDING',
+      created_at: now,
+      updated_at: now,
+      recovery_attempts: null,
+      step_count: 0,
+      input,
+    }
+
+    const detail: WorkflowDetail = {
+      workflow: {
+        workflow_id: id,
+        name: agent.id,
+        status: 'PENDING',
+        created_at: now,
+        updated_at: now,
+        recovery_attempts: null,
+        input,
+      },
+      steps: [],
+    }
+
+    prependWorkflow(summary, detail)
+    setModalOpen(false)
+    showToast('Workflow started', `${id.slice(0, 8)}…${id.slice(-4)}`)
+    runMockWorkflow(id, agent, topic, { updateSummary, setDetail })
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-950">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 px-6 py-4">
+      <div className="bg-slate-900 border-b border-slate-800 px-6 py-4">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="text-amber-500 font-bold tracking-tight text-xl">Amber</span>
-            <span className="text-gray-300 select-none">·</span>
-            <h1 className="text-xl font-semibold text-slate-900 tracking-tight">
+            <span className="text-amber-500 font-semibold tracking-tight text-xl">Amber</span>
+            <span className="text-slate-700 select-none">·</span>
+            <h1 className="text-xl font-semibold text-slate-50 tracking-tight">
               Workflows
             </h1>
-            <span className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-medium">
+            <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-400 text-xs font-medium">
               {counts.all}
             </span>
           </div>
-          <button
-            className="p-2 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-            title="Refresh"
-          >
-            <RefreshCw size={16} />
-          </button>
+          <div className="flex items-center gap-2">
+            {SHOW_RUN_BUTTON && (
+              <NewWorkflowButton onClick={() => setModalOpen(true)} />
+            )}
+            <button
+              className="p-2 rounded-md hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition-colors"
+              title="Refresh"
+            >
+              <RefreshCw size={16} />
+            </button>
+          </div>
         </div>
       </div>
 
@@ -113,8 +169,8 @@ export function WorkflowListPage() {
               onClick={() => setFilter(f)}
               className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                 filter === f
-                  ? 'bg-amber-500 text-white'
-                  : 'bg-white text-gray-600 border border-gray-200 hover:border-gray-300 hover:text-gray-800'
+                  ? 'bg-amber-500 text-slate-950 font-medium'
+                  : 'bg-slate-900 text-slate-300 border border-slate-800 hover:bg-slate-800'
               }`}
             >
               {FILTER_LABELS[f]}
@@ -123,29 +179,29 @@ export function WorkflowListPage() {
         </div>
 
         {/* List */}
-        <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+        <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
           {filtered.length === 0 ? (
-            <div className="px-4 py-12 text-center text-sm text-gray-400">
+            <div className="px-4 py-12 text-center text-sm text-slate-500">
               {EMPTY_MESSAGES[filter]}
             </div>
           ) : (
             <table className="w-full border-collapse">
               <thead>
-                <tr className="border-b border-gray-100">
+                <tr className="border-b border-slate-800">
                   <th className="pl-4 pr-2 py-2.5 w-8" />
-                  <th className="pr-4 py-2.5 text-left text-xs font-medium text-gray-400 uppercase tracking-wide">
+                  <th className="pr-4 py-2.5 text-left text-xs font-medium text-slate-400 uppercase tracking-wide">
                     Workflow
                   </th>
-                  <th className="pr-4 py-2.5 text-right text-xs font-medium text-gray-400 uppercase tracking-wide whitespace-nowrap">
+                  <th className="pr-4 py-2.5 text-right text-xs font-medium text-slate-400 uppercase tracking-wide whitespace-nowrap">
                     Started
                   </th>
-                  <th className="pr-4 py-2.5 text-right text-xs font-medium text-gray-400 uppercase tracking-wide">
+                  <th className="pr-4 py-2.5 text-right text-xs font-medium text-slate-400 uppercase tracking-wide">
                     Duration
                   </th>
-                  <th className="pr-4 py-2.5 text-right text-xs font-medium text-gray-400 uppercase tracking-wide">
+                  <th className="pr-4 py-2.5 text-right text-xs font-medium text-slate-400 uppercase tracking-wide">
                     Steps
                   </th>
-                  <th className="pr-4 py-2.5 text-right text-xs font-medium text-gray-400 uppercase tracking-wide">
+                  <th className="pr-4 py-2.5 text-right text-xs font-medium text-slate-400 uppercase tracking-wide">
                     Recovery
                   </th>
                 </tr>
@@ -155,33 +211,33 @@ export function WorkflowListPage() {
                   <tr
                     key={w.workflow_id}
                     onClick={() => navigate(`/workflows/${w.workflow_id}`)}
-                    className="border-b last:border-b-0 border-gray-100 hover:bg-gray-50 cursor-pointer transition-colors"
+                    className="border-b last:border-b-0 border-slate-800 hover:bg-slate-800/50 cursor-pointer transition-colors"
                   >
                     <td className="pl-4 pr-2 py-3.5">
                       <StatusIcon status={w.status} />
                     </td>
                     <td className="pr-4 py-3.5 max-w-xs">
-                      <p className="text-sm font-medium text-slate-900 truncate">
+                      <p className="text-sm font-medium text-slate-50 truncate">
                         {humanizeWorkflowName(w.name)}
                       </p>
                       <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
-                        <span className="text-xs font-mono text-gray-400 shrink-0">
+                        <span className="text-xs font-mono text-slate-500 shrink-0">
                           {w.workflow_id.slice(0, 8)}…{w.workflow_id.slice(-4)}
                         </span>
                         {w.input && (
-                          <span className="text-xs text-gray-400 truncate">
+                          <span className="text-xs text-slate-500 truncate">
                             · {extractWorkflowInputArg(w.input)}
                           </span>
                         )}
                       </div>
                     </td>
-                    <td className="pr-4 py-3.5 text-xs text-gray-500 whitespace-nowrap text-right">
+                    <td className="pr-4 py-3.5 text-xs text-slate-300 whitespace-nowrap text-right">
                       {formatRelativeTime(w.created_at)}
                     </td>
-                    <td className="pr-4 py-3.5 text-xs font-mono text-gray-500 text-right whitespace-nowrap">
+                    <td className="pr-4 py-3.5 text-xs font-mono text-slate-300 text-right whitespace-nowrap">
                       {workflowDuration(w)}
                     </td>
-                    <td className="pr-4 py-3.5 text-xs text-gray-500 text-right">
+                    <td className="pr-4 py-3.5 text-xs text-slate-300 text-right">
                       {w.step_count}
                     </td>
                     <td className="pr-4 py-3.5 text-right">
@@ -194,6 +250,13 @@ export function WorkflowListPage() {
           )}
         </div>
       </div>
+
+      {modalOpen && (
+        <NewWorkflowModal
+          onClose={() => setModalOpen(false)}
+          onSubmit={handleNewWorkflow}
+        />
+      )}
     </div>
   )
 }

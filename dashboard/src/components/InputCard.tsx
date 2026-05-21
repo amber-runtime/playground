@@ -8,11 +8,11 @@ export function InputCard({ input }: Props) {
   const topic = extractWorkflowInputArg(input)
 
   return (
-    <div className="bg-white border border-gray-200 rounded-lg px-5 py-3.5 flex items-baseline gap-3">
-      <span className="text-xs font-medium text-gray-400 uppercase tracking-wider shrink-0">
+    <div className="bg-slate-900 border border-slate-800 rounded-lg px-5 py-3.5 flex items-baseline gap-3">
+      <span className="text-xs font-medium text-slate-400 uppercase tracking-wider shrink-0">
         Topic
       </span>
-      <span className="text-gray-800 text-sm">{topic}</span>
+      <span className="text-slate-300 text-sm">{topic}</span>
     </div>
   )
 }
