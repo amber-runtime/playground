@@ -21,6 +21,13 @@ from .queries import (
     fetch_agent_events_async,
     fetch_agent_events_for_dashboard,
 )
+from .models import (
+    WorkflowSummary,
+    WorkflowRecord,
+    StepRecord,
+    AgentEvent,
+    WorkflowDetail,
+)
 
 __all__ = [
     "RegisteredAgent",
@@ -42,4 +49,9 @@ __all__ = [
     "fetch_agent_events",
     "fetch_agent_events_async",
     "fetch_agent_events_for_dashboard",
+    "WorkflowSummary",
+    "WorkflowRecord",
+    "StepRecord",
+    "AgentEvent",
+    "WorkflowDetail",
 ]

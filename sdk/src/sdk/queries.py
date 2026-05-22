@@ -123,7 +123,7 @@ def build_step_records(
       - llm_response events are joined to steps by step_id
       - tool_call events are joined to steps by step_id
     DBOS-native step metadata is always preserved when present:
-      - output, error, and child workflow linkage from DBOS operation_outputs
+      - output from DBOS operation_outputs
     Falls back to DBOS-only shape when agent_events is None or empty.
     """
     # Build lookup: step_id → first matching event of each relevant type.
@@ -184,8 +184,6 @@ def build_step_records(
             "status":                "SUCCESS" if step.get("error") is None else "ERROR",
             "duration_ms":           duration_ms,
             "step_output":           _to_dashboard_value(step.get("output")),
-            "step_error":            None if step.get("error") is None else str(step.get("error")),
-            "child_workflow_id":     step.get("child_workflow_id"),
             # LLM fields — populated for _model_call_step rows
             "llm_model":             llm.get("model"),
             "tokens_in":             llm.get("tokens_in"),
