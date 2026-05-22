@@ -1,10 +1,11 @@
 """
 Checkpoint dashboard backend.
 
-Read-only API for dashboard deployments. This service does not import customer
-agent modules, list registered agents, or start workflows. It only initializes
-DBOS enough to read workflow metadata and enrich traces from the same database
-used by embedded customer applications or the optional runtime server.
+Dashboard/admin API for workflow inspection and control. This service does not
+import customer agent modules, list registered agents, or start workflows. It
+reads DBOS workflow metadata through a lightweight DBOS client and enriches
+traces from the same database used by embedded customer applications or the
+optional runtime server.
 
 ## Run
   uv run uvicorn admin_control_plane.dashboard_backend:app --port 8001
@@ -13,100 +14,34 @@ used by embedded customer applications or the optional runtime server.
   GET /health
   GET /workflows?status=PENDING&limit=50
   GET /workflows/{workflow_id}
+  POST /workflows/{workflow_id}/resume
+  POST /workflows/{workflow_id}/cancel
 """
 
 import os
-from contextlib import asynccontextmanager
-from typing import Any, Optional
+from functools import lru_cache
+from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 
-from sdk import (
-    ensure_initialized,
-    list_workflows,
-    get_workflow,
-    get_steps,
-    build_step_records,
-    fetch_agent_events_for_dashboard,
-)
+from sdk.dashboard_client import DashboardClient
+from sdk.models import WorkflowDetail, WorkflowSummary
 
 load_dotenv()
 
 DB_URL = os.environ.get("DB_URL") or os.environ.get("DBOS_SYSTEM_DATABASE_URL") or ""
 
 
-class WorkflowSummary(BaseModel):
-    workflow_id: str
-    name: str
-    status: str
-    created_at: Optional[int]
-    completed_at: Optional[int]
-    recovery_attempts: Optional[int]
+@lru_cache(maxsize=1)
+def get_dashboard_client() -> DashboardClient:
+    if not DB_URL:
+        raise RuntimeError("DB_URL or DBOS_SYSTEM_DATABASE_URL must be configured")
+    return DashboardClient(db_url=DB_URL)
 
 
-class WorkflowRecord(BaseModel):
-    workflow_id: str
-    name: str
-    status: str
-    created_at: Optional[int]
-    updated_at: Optional[int]
-    recovery_attempts: Optional[int]
-    output: Optional[str] = None
-
-
-class StepRecord(BaseModel):
-    step_id: Optional[int]
-    function_name: Optional[str]
-    event_type: str
-    status: str
-    duration_ms: Optional[int]
-    agent_name: Optional[str] = None
-    llm_model: Optional[str]
-    tokens_in: Optional[int]
-    tokens_out: Optional[int]
-    llm_input: Any | None = None
-    llm_output: Any | None = None
-    tool_name: Optional[str]
-    tool_args: Any | None
-    tool_result: Optional[str] = None
-    captured_at: Any | None = None
-
-
-class AgentEvent(BaseModel):
-    span_id: str
-    step_id: Optional[int]
-    event_type: str
-    agent_name: Optional[str] = None
-    model: Optional[str]
-    tokens_in: Optional[int]
-    tokens_out: Optional[int]
-    provider_response_id: Optional[str]
-    llm_input: Any | None = None
-    llm_output: Any | None = None
-    tool_name: Optional[str]
-    tool_args: Any | None
-    tool_result: Optional[str]
-    from_agent: Optional[str]
-    to_agent: Optional[str]
-    captured_at: Any
-
-
-class WorkflowDetail(BaseModel):
-    workflow: WorkflowRecord
-    steps: list[StepRecord]
-    events: list[AgentEvent]
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    ensure_initialized(name="checkpoint-dashboard", db_url=DB_URL or None)
-    yield
-
-
-app = FastAPI(title="Checkpoint Dashboard", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="Admin Dashboard", version="0.2.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -128,7 +63,7 @@ async def get_workflows(
     limit: int = Query(50, ge=1, le=200, description="Maximum results to return"),
 ):
     """List workflows from DBOS, newest first."""
-    rows = await list_workflows(status=status, limit=limit)
+    rows = await get_dashboard_client().list_workflows(status=status, limit=limit)
     return [
         WorkflowSummary(
             workflow_id=r["workflow_id"],
@@ -145,16 +80,22 @@ async def get_workflows(
 @app.get("/workflows/{workflow_id}", response_model=WorkflowDetail)
 async def get_workflow_detail(workflow_id: str):
     """Return workflow info, enriched step history, and raw agent events."""
-    wf = await get_workflow(workflow_id)
+    wf, step_records, agent_events = await get_dashboard_client().get_workflow_detail_data(
+        workflow_id
+    )
     if wf is None:
         raise HTTPException(
             status_code=404, detail=f"Workflow {workflow_id!r} not found"
         )
 
-    steps = await get_steps(workflow_id)
-    agent_events = (
-        await fetch_agent_events_for_dashboard(workflow_id, DB_URL) if DB_URL else []
-    )
-    step_records = build_step_records(steps, agent_events)
-
     return WorkflowDetail(workflow=wf, steps=step_records, events=agent_events)
+
+
+@app.post("/workflows/{workflow_id}/resume")
+async def resume_workflow(workflow_id: str):
+    return await get_dashboard_client().resume_workflow(workflow_id)
+
+
+@app.post("/workflows/{workflow_id}/cancel")
+async def cancel_workflow(workflow_id: str):
+    return await get_dashboard_client().cancel_workflow(workflow_id)

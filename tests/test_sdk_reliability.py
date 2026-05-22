@@ -76,6 +76,47 @@ class QueryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(records[0]["step_id"])
         self.assertIsNone(records[0]["function_name"])
         self.assertEqual(records[0]["event_type"], "step")
+        self.assertIsNone(records[0]["step_output"])
+        self.assertIsNone(records[0]["step_error"])
+        self.assertIsNone(records[0]["child_workflow_id"])
+
+    def test_build_step_records_carries_dbos_native_output_for_plain_steps(self):
+        steps = [
+            {
+                "function_id": 1,
+                "function_name": "normalize_travel_request",
+                "output": {"destination": "Tokyo", "guests": 2},
+                "error": None,
+                "child_workflow_id": None,
+            }
+        ]
+
+        records = queries.build_step_records(steps, [])
+
+        self.assertEqual(records[0]["event_type"], "step")
+        self.assertEqual(
+            records[0]["step_output"],
+            {"destination": "Tokyo", "guests": 2},
+        )
+        self.assertIsNone(records[0]["step_error"])
+        self.assertIsNone(records[0]["child_workflow_id"])
+
+    def test_build_step_records_stringifies_dbos_native_errors(self):
+        steps = [
+            {
+                "function_id": 2,
+                "function_name": "lookup_price",
+                "output": None,
+                "error": ValueError("bad lookup"),
+                "child_workflow_id": "wf-child-1",
+            }
+        ]
+
+        records = queries.build_step_records(steps, [])
+
+        self.assertEqual(records[0]["status"], "ERROR")
+        self.assertEqual(records[0]["step_error"], "bad lookup")
+        self.assertEqual(records[0]["child_workflow_id"], "wf-child-1")
 
     def test_build_step_records_carries_llm_raw_io(self):
         steps = [{"function_id": 1, "function_name": "_model_call_step", "error": None}]
@@ -134,6 +175,23 @@ class QueryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(records[0]["event_type"], "tool_call")
         self.assertEqual(records[0]["tool_result"], "best flight selected")
         self.assertEqual(records[0]["captured_at"], "2026-05-21T12:00:01Z")
+
+    def test_build_step_records_carries_agent_name_for_tool_steps(self):
+        steps = [{"function_id": 6, "function_name": "get_flight_quotes", "error": None}]
+        events = [
+            {
+                "span_id": "span-6",
+                "step_id": 6,
+                "event_type": "tool_call",
+                "agent_name": "flight_researcher",
+                "tool_name": "get_flight_quotes",
+            }
+        ]
+
+        records = queries.build_step_records(steps, events)
+
+        self.assertEqual(records[0]["event_type"], "tool_call")
+        self.assertEqual(records[0]["agent_name"], "flight_researcher")
 
     async def test_fetch_agent_events_for_dashboard_swallows_read_failures(self):
         with (
@@ -683,6 +741,50 @@ class TracingTests(unittest.TestCase):
 
         record = write.call_args.args[1]
         self.assertEqual(record["agent_name"], "flight_researcher")
+
+    def test_function_span_inherits_agent_name_from_turn_span(self):
+        processor = self.tracing.CheckpointTracingProcessor("postgresql://db")
+        turn_span = types.SimpleNamespace(
+            span_id="turn-1",
+            parent_id=None,
+            span_data=self.TurnSpanData(turn=1, agent_name="flight_researcher"),
+        )
+        tool_span = types.SimpleNamespace(
+            span_id="tool-1",
+            parent_id="turn-1",
+            span_data=self.FunctionSpanData(name="get_flight_quotes", input="{}", output="ok"),
+        )
+
+        processor.on_span_start(turn_span)
+        processor.on_span_start(tool_span)
+        with mock.patch.object(self.tracing, "_write_agent_event") as write:
+            processor.on_span_end(tool_span)
+
+        record = write.call_args.args[1]
+        self.assertEqual(record["event_type"], "tool_call")
+        self.assertEqual(record["agent_name"], "flight_researcher")
+
+    def test_function_span_falls_back_to_agent_span_name(self):
+        processor = self.tracing.CheckpointTracingProcessor("postgresql://db")
+        agent_span = types.SimpleNamespace(
+            span_id="agent-1",
+            parent_id=None,
+            span_data=self.AgentSpanData(name="travel-concierge-planner"),
+        )
+        tool_span = types.SimpleNamespace(
+            span_id="tool-1",
+            parent_id="agent-1",
+            span_data=self.FunctionSpanData(name="record_planning_decision", input="{}", output="ok"),
+        )
+
+        processor.on_span_start(agent_span)
+        processor.on_span_start(tool_span)
+        with mock.patch.object(self.tracing, "_write_agent_event") as write:
+            processor.on_span_end(tool_span)
+
+        record = write.call_args.args[1]
+        self.assertEqual(record["event_type"], "tool_call")
+        self.assertEqual(record["agent_name"], "travel-concierge-planner")
 
     def test_to_json_compatible_handles_model_dump_and_lists(self):
         class FakeModel:
