@@ -6,56 +6,38 @@ import {
   Wrench,
   ChevronDown,
   ChevronRight,
-  Copy,
-  Check,
   CheckCircle2,
   XCircle,
   Loader2,
 } from 'lucide-react'
-import type { StepWithTiming } from '../lib/types'
+import type { Step } from '../lib/types'
 import { getStepKind, humanizeStepName, formatDuration, stepDurationMs } from '../lib/stepHelpers'
 
 interface Props {
-  step: StepWithTiming
+  step: Step
   index: number
   isActive: boolean
 }
 
-function CopyInline({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false)
-  return (
-    <button
-      onClick={(e) => {
-        e.stopPropagation()
-        navigator.clipboard.writeText(text).catch(() => undefined)
-        setCopied(true)
-        setTimeout(() => setCopied(false), 1500)
-      }}
-      className="ml-1 inline-flex items-center p-0.5 rounded hover:bg-slate-700 text-slate-500 hover:text-slate-300 transition-colors"
-    >
-      {copied ? <Check size={11} /> : <Copy size={11} />}
-    </button>
-  )
-}
-
-function StepIcon({ functionName }: { functionName: string | null }) {
-  const kind = getStepKind(functionName)
+function StepIcon({ step }: { step: Step }) {
+  const kind = getStepKind(step)
   const cls = 'shrink-0'
   if (kind === 'llm') return <Brain size={15} className={`${cls} text-slate-400`} />
   if (kind === 'sleep') return <Clock size={15} className={`${cls} text-slate-600`} />
-  if (functionName === 'search_web') return <Search size={15} className={`${cls} text-emerald-400`} />
+  if (step.tool_name === 'search_web' || step.function_name === 'search_web')
+    return <Search size={15} className={`${cls} text-emerald-400`} />
   return <Wrench size={15} className={`${cls} text-sky-400`} />
 }
 
-function StatusDot({ step }: { step: StepWithTiming }) {
-  if (step.error)
+function StatusDot({ step }: { step: Step }) {
+  if (step.status === 'ERROR')
     return <XCircle size={14} className="text-red-400 shrink-0" />
   if (step.completed_at_epoch_ms == null)
     return <Loader2 size={14} className="text-amber-400 shrink-0 animate-spin" />
   return <CheckCircle2 size={14} className="text-emerald-400 shrink-0" />
 }
 
-function LLMStepBody({ step }: { step: StepWithTiming }) {
+function LLMStepBody({ step }: { step: Step }) {
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400 font-mono bg-slate-800 rounded px-3 py-2">
@@ -67,29 +49,9 @@ function LLMStepBody({ step }: { step: StepWithTiming }) {
             {(step.tokens_in + step.tokens_out).toLocaleString()} total
           </span>
         )}
-        {step.provider_response_id && (
-          <span className="text-slate-500 ml-auto flex items-center">
-            {step.provider_response_id.slice(0, 28)}…
-            <CopyInline text={step.provider_response_id} />
-          </span>
-        )}
       </div>
-      {step.llm_input != null && (
-        <div>
-          <p className="text-slate-400 text-xs uppercase tracking-wide font-medium mb-2">LLM Input</p>
-          <pre className="bg-slate-950 border border-slate-800 rounded p-3 text-xs text-slate-300 overflow-x-auto max-h-64 overflow-y-auto">
-            {JSON.stringify(step.llm_input, null, 2)}
-          </pre>
-        </div>
-      )}
-      {step.llm_output != null && (
-        <div>
-          <p className="text-slate-400 text-xs uppercase tracking-wide font-medium mb-2">LLM Output</p>
-          <pre className="bg-slate-950 border border-slate-800 rounded p-3 text-xs text-slate-300 overflow-x-auto max-h-64 overflow-y-auto">
-            {JSON.stringify(step.llm_output, null, 2)}
-          </pre>
-        </div>
-      )}
+      {step.llm_input != null && <LLMMessages value={step.llm_input} label="LLM Input" />}
+      {step.llm_output != null && <LLMMessages value={step.llm_output} label="LLM Output" />}
       {step.tool_args != null && (
         <div className="flex items-start gap-2 text-sm">
           <span className="text-slate-500 mt-0.5 shrink-0">→</span>
@@ -99,7 +61,7 @@ function LLMStepBody({ step }: { step: StepWithTiming }) {
               {step.tool_name ?? 'tool'}
             </code>
             <pre className="mt-1.5 text-xs bg-slate-800 rounded p-2 overflow-x-auto text-slate-300 font-mono leading-relaxed">
-              {JSON.stringify(step.tool_args, null, 2)}
+              {prettyOutput(step.tool_args)}
             </pre>
           </span>
         </div>
@@ -108,24 +70,33 @@ function LLMStepBody({ step }: { step: StepWithTiming }) {
   )
 }
 
-function ToolStepBody({ step }: { step: StepWithTiming }) {
-  if (step.tool_args != null) {
-    return (
-      <pre className="text-xs font-mono bg-slate-800 rounded p-3 overflow-x-auto text-slate-300 leading-relaxed">
-        {JSON.stringify(step.tool_args, null, 2)}
-      </pre>
-    )
+function ToolStepBody({ step }: { step: Step }) {
+  if (step.tool_args == null && step.tool_result == null) {
+    return <p className="text-sm text-slate-500 italic">Tool output not available.</p>
   }
   return (
-    <p className="text-sm text-slate-500 italic">
-      {step.tool_match_status === 'ambiguous'
-        ? 'Tool was called successfully, but multiple invocations occurred in close succession and the result couldn’t be linked to this specific step.'
-        : 'Tool output not available.'}
-    </p>
+    <div className="space-y-3">
+      {step.tool_args != null && (
+        <div>
+          <p className="text-slate-400 text-xs uppercase tracking-wide font-medium mb-1">Input</p>
+          <pre className="text-xs font-mono bg-slate-800 rounded p-3 overflow-x-auto text-slate-300 leading-relaxed">
+            {prettyOutput(step.tool_args)}
+          </pre>
+        </div>
+      )}
+      {step.tool_result != null && (
+        <div>
+          <p className="text-slate-400 text-xs uppercase tracking-wide font-medium mb-1">Output</p>
+          <pre className="text-xs font-mono bg-slate-800 rounded p-3 overflow-x-auto text-slate-300 leading-relaxed max-h-48 overflow-y-auto">
+            {step.tool_result}
+          </pre>
+        </div>
+      )}
+    </div>
   )
 }
 
-function SleepBody({ step }: { step: StepWithTiming }) {
+function SleepBody({ step }: { step: Step }) {
   const dur = stepDurationMs(step)
   return (
     <p className="text-sm text-slate-500 italic">
@@ -134,10 +105,95 @@ function SleepBody({ step }: { step: StepWithTiming }) {
   )
 }
 
-function ExpandedBody({ step }: { step: StepWithTiming }) {
-  const kind = getStepKind(step.function_name)
+// Extract readable text from an LLM content field.
+// Content can be a plain string or an array of blocks like { type, text }.
+function extractContentText(content: unknown): string | null {
+  if (typeof content === 'string') return content
+  if (Array.isArray(content)) {
+    const parts = content
+      .map((b) => (b && typeof b === 'object' && 'text' in b ? String((b as Record<string, unknown>).text) : null))
+      .filter(Boolean)
+    return parts.length > 0 ? parts.join('\n') : null
+  }
+  return null
+}
+
+// Render an array of LLM messages as { role, text } pairs when possible.
+// Returns null if the value doesn't look like a message array.
+function parseLLMMessages(value: unknown): { role: string; text: string }[] | null {
+  if (!Array.isArray(value)) return null
+  const messages = value.flatMap((item) => {
+    if (!item || typeof item !== 'object') return []
+    const { role, content } = item as Record<string, unknown>
+    if (typeof role !== 'string') return []
+    const text = extractContentText(content)
+    return text != null ? [{ role, text }] : []
+  })
+  return messages.length > 0 ? messages : null
+}
+
+function LLMMessages({ value, label }: { value: unknown; label: string }) {
+  const messages = parseLLMMessages(value)
+  if (!messages) {
+    return (
+      <div>
+        <p className="text-slate-400 text-xs uppercase tracking-wide font-medium mb-2">{label}</p>
+        <pre className="bg-slate-950 border border-slate-800 rounded p-3 text-xs text-slate-300 overflow-x-auto max-h-64 overflow-y-auto">
+          {prettyOutput(value)}
+        </pre>
+      </div>
+    )
+  }
+  return (
+    <div>
+      <p className="text-slate-400 text-xs uppercase tracking-wide font-medium mb-2">{label}</p>
+      <div className="space-y-2">
+        {messages.map(({ role, text }, i) => (
+          <div key={i} className="bg-slate-950 border border-slate-800 rounded p-3 text-xs">
+            <span className="text-slate-500 font-mono uppercase text-[10px] tracking-wider">{role}</span>
+            <pre className="mt-1.5 text-slate-300 whitespace-pre-wrap leading-relaxed">{text}</pre>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function deepParse(value: unknown): unknown {
+  if (typeof value === 'string') {
+    try { return deepParse(JSON.parse(value)) } catch { return value }
+  }
+  if (Array.isArray(value)) return value.map(deepParse)
+  if (value !== null && typeof value === 'object')
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([k, v]) => [k, deepParse(v)])
+    )
+  return value
+}
+
+function prettyOutput(value: unknown): string {
+  return JSON.stringify(deepParse(value), null, 2)
+}
+
+function StepOutputBody({ step }: { step: Step }) {
+  if (step.step_output == null) {
+    return <p className="text-sm text-slate-500 italic">No output recorded.</p>
+  }
+  return (
+    <div>
+      <p className="text-slate-400 text-xs uppercase tracking-wide font-medium mb-1">Output</p>
+      <pre className="text-xs font-mono bg-slate-800 rounded p-3 overflow-x-auto text-slate-300 leading-relaxed max-h-48 overflow-y-auto">
+        {prettyOutput(step.step_output)}
+      </pre>
+    </div>
+  )
+}
+
+function ExpandedBody({ step }: { step: Step }) {
+  const kind = getStepKind(step)
   if (kind === 'llm') return <LLMStepBody step={step} />
   if (kind === 'sleep') return <SleepBody step={step} />
+  if (kind === 'other') return <StepOutputBody step={step} />
   return <ToolStepBody step={step} />
 }
 
@@ -155,10 +211,12 @@ export function StepCard({ step, index, isActive }: Props) {
   }, [isActive])
 
   const dur = stepDurationMs(step)
-  const kind = getStepKind(step.function_name)
+  const kind = getStepKind(step)
   const isSleep = kind === 'sleep'
-  const humanName = humanizeStepName(step.function_name)
-  const hasError = !!step.error
+  const humanName = step.event_type === 'tool_call'
+    ? humanizeStepName(step.tool_name ?? step.function_name)
+    : humanizeStepName(step.function_name)
+  const hasError = step.status === 'ERROR'
   const inProgress = step.completed_at_epoch_ms == null
 
   return (
@@ -177,12 +235,11 @@ export function StepCard({ step, index, isActive }: Props) {
         className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-slate-800 transition-colors"
         onClick={() => setExpanded((v) => !v)}
       >
-        {/* Step number */}
         <span className="w-6 h-6 rounded-full bg-slate-800 text-slate-400 text-xs font-semibold flex items-center justify-center shrink-0">
           {index + 1}
         </span>
 
-        <StepIcon functionName={step.function_name} />
+        <StepIcon step={step} />
 
         <span
           className={`flex-1 text-sm font-medium ${
@@ -206,15 +263,6 @@ export function StepCard({ step, index, isActive }: Props) {
         </span>
       </button>
 
-      {/* Error preview — visible when collapsed */}
-      {hasError && !expanded && (
-        <div className="px-4 pb-3 border-l-2 border-red-500/50 ml-4">
-          <p className="text-xs text-red-400 font-mono leading-relaxed line-clamp-2">
-            {step.error}
-          </p>
-        </div>
-      )}
-
       {/* Expanded body */}
       {expanded && (
         <div
@@ -222,15 +270,7 @@ export function StepCard({ step, index, isActive }: Props) {
             hasError ? 'border-l-2 border-l-red-500/50 ml-4' : ''
           }`}
         >
-          {hasError && (
-            <div className="mb-3">
-              <p className="text-xs font-semibold text-red-400 mb-1">Error</p>
-              <pre className="text-xs font-mono text-red-300 bg-red-500/10 rounded p-2.5 overflow-x-auto whitespace-pre-wrap leading-relaxed">
-                {step.error}
-              </pre>
-            </div>
-          )}
-          {!hasError && <ExpandedBody step={step} />}
+          <ExpandedBody step={step} />
         </div>
       )}
     </div>

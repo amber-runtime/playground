@@ -7,6 +7,7 @@ Two layers:
 """
 
 import asyncio
+from datetime import UTC, datetime
 import logging
 from typing import Optional
 
@@ -66,6 +67,15 @@ def _to_dashboard_value(value):
     if isinstance(value, set):
         return [_to_dashboard_value(item) for item in sorted(value, key=repr)]
     return str(value)
+
+
+def _epoch_ms_to_iso8601(epoch_ms: int | None) -> str | None:
+    """Convert epoch milliseconds into an ISO-8601 UTC timestamp."""
+    if epoch_ms is None:
+        return None
+    return datetime.fromtimestamp(epoch_ms / 1000, tz=UTC).isoformat().replace(
+        "+00:00", "Z"
+    )
 
 
 # ── Agent events ──────────────────────────────────────────────────────────────
@@ -164,13 +174,18 @@ def build_step_records(
     for step in steps:
         step_id = step.get("function_id")
         fn_name = step.get("function_name")
+        started_at_epoch_ms = step.get("started_at_epoch_ms")
+        completed_at_epoch_ms = step.get("completed_at_epoch_ms")
         duration_ms = None
-        if step.get("started_at_epoch_ms") and step.get("completed_at_epoch_ms"):
-            duration_ms = step["completed_at_epoch_ms"] - step["started_at_epoch_ms"]
+        if started_at_epoch_ms is not None and completed_at_epoch_ms is not None:
+            duration_ms = completed_at_epoch_ms - started_at_epoch_ms
 
         llm = llm_by_step.get(step_id, {})
         tool = tool_by_step.get(step_id, {})
         event = llm if llm else tool
+        fallback_captured_at = _epoch_ms_to_iso8601(
+            completed_at_epoch_ms if completed_at_epoch_ms is not None else started_at_epoch_ms
+        )
         event_type = "step"
         if llm:
             event_type = "llm_response"
@@ -183,6 +198,8 @@ def build_step_records(
             "event_type":            event_type,
             "status":                "SUCCESS" if step.get("error") is None else "ERROR",
             "duration_ms":           duration_ms,
+            "started_at_epoch_ms":   started_at_epoch_ms,
+            "completed_at_epoch_ms": completed_at_epoch_ms,
             "step_output":           _to_dashboard_value(step.get("output")),
             # LLM fields — populated for _model_call_step rows
             "llm_model":             llm.get("model"),
@@ -195,6 +212,6 @@ def build_step_records(
             "tool_name":             tool.get("tool_name") or fn_name,
             "tool_args":             tool.get("tool_args"),
             "tool_result":           tool.get("tool_result"),
-            "captured_at":           event.get("captured_at"),
+            "captured_at":           event.get("captured_at") or fallback_captured_at,
         })
     return records
