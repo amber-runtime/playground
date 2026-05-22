@@ -7,7 +7,7 @@ DBOS enough to read workflow metadata and enrich traces from the same database
 used by embedded customer applications or the optional runtime server.
 
 ## Run
-  uv run uvicorn dashboard.dashboard_backend:app --port 8001
+  uv run uvicorn admin_control_plane.dashboard_backend:app --port 8001
 
 ## Endpoints
   GET /health
