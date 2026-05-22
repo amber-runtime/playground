@@ -4,11 +4,18 @@ import sys
 import tempfile
 import types
 import unittest
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def iso_utc_from_ms(epoch_ms: int) -> str:
+    return datetime.fromtimestamp(epoch_ms / 1000, tz=UTC).isoformat().replace(
+        "+00:00", "Z"
+    )
 
 
 def load_module(name: str, relative_path: str):
@@ -88,6 +95,8 @@ class QueryTests(unittest.IsolatedAsyncioTestCase):
                 "output": {"destination": "Tokyo", "guests": 2},
                 "error": None,
                 "child_workflow_id": None,
+                "started_at_epoch_ms": 1_747_830_400_000,
+                "completed_at_epoch_ms": 1_747_830_405_250,
             }
         ]
 
@@ -100,6 +109,46 @@ class QueryTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertIsNone(records[0]["step_error"])
         self.assertIsNone(records[0]["child_workflow_id"])
+
+    def test_build_step_records_falls_back_to_completed_at_for_plain_steps(self):
+        steps = [
+            {
+                "function_id": 1,
+                "function_name": "normalize_travel_request",
+                "output": {"destination": "Tokyo", "guests": 2},
+                "error": None,
+                "started_at_epoch_ms": 1_747_830_400_000,
+                "completed_at_epoch_ms": 1_747_830_405_250,
+            }
+        ]
+
+        records = queries.build_step_records(steps, [])
+
+        self.assertEqual(records[0]["duration_ms"], 5250)
+        self.assertEqual(
+            records[0]["captured_at"],
+            iso_utc_from_ms(1_747_830_405_250),
+        )
+
+    def test_build_step_records_falls_back_to_started_at_for_in_progress_plain_steps(self):
+        steps = [
+            {
+                "function_id": 3,
+                "function_name": "lookup_price",
+                "output": None,
+                "error": None,
+                "started_at_epoch_ms": 1_747_830_410_000,
+                "completed_at_epoch_ms": None,
+            }
+        ]
+
+        records = queries.build_step_records(steps, [])
+
+        self.assertIsNone(records[0]["duration_ms"])
+        self.assertEqual(
+            records[0]["captured_at"],
+            iso_utc_from_ms(1_747_830_410_000),
+        )
 
     def test_build_step_records_stringifies_dbos_native_errors(self):
         steps = [
@@ -140,6 +189,29 @@ class QueryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(records[0]["llm_input"], events[0]["llm_input"])
         self.assertEqual(records[0]["llm_output"], events[0]["llm_output"])
         self.assertEqual(records[0]["captured_at"], events[0]["captured_at"])
+
+    def test_build_step_records_prefers_event_timestamp_over_dbos_timing(self):
+        steps = [
+            {
+                "function_id": 1,
+                "function_name": "_model_call_step",
+                "error": None,
+                "started_at_epoch_ms": 1_747_830_400_000,
+                "completed_at_epoch_ms": 1_747_830_405_000,
+            }
+        ]
+        events = [
+            {
+                "span_id": "span-1",
+                "step_id": 1,
+                "event_type": "llm_response",
+                "captured_at": "2026-05-21T12:00:00Z",
+            }
+        ]
+
+        records = queries.build_step_records(steps, events)
+
+        self.assertEqual(records[0]["captured_at"], "2026-05-21T12:00:00Z")
 
     def test_build_step_records_carries_agent_name_for_llm_steps(self):
         steps = [{"function_id": 1, "function_name": "_model_call_step", "error": None}]
