@@ -7,6 +7,7 @@ Run:
 
 from contextlib import asynccontextmanager
 from pathlib import Path
+import random
 
 from dotenv import load_dotenv
 from fastapi import Body, FastAPI, HTTPException, Query, Request
@@ -27,6 +28,9 @@ load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+
+# Demo-only: 0.0 disables random travel crashes; 1.0 arms every travel request.
+RANDOM_TRAVEL_CRASH_RATE = 0.25
 
 
 class RunRequest(BaseModel):
@@ -92,7 +96,9 @@ KNOWN_AGENT_CAPABILITIES = {
 
 
 def _humanize_agent_name(name: str) -> str:
-    return " ".join(part.capitalize() for part in name.replace("_", "-").split("-") if part)
+    return " ".join(
+        part.capitalize() for part in name.replace("_", "-").split("-") if part
+    )
 
 
 def _agent_capability(name: str) -> RegisteredAgentResponse:
@@ -109,6 +115,12 @@ def _agent_capability(name: str) -> RegisteredAgentResponse:
         sample_input="",
         is_known=False,
     )
+
+
+def _should_arm_travel_crash(agent: str, *, crash_during_hotel: bool) -> bool:
+    if agent != "travel-concierge":
+        return False
+    return crash_during_hotel or random.random() < RANDOM_TRAVEL_CRASH_RATE
 
 
 app = FastAPI(
@@ -150,7 +162,10 @@ async def health() -> dict[str, object]:
 
 @app.get("/agents", response_model=list[RegisteredAgentResponse])
 async def get_agents() -> list[RegisteredAgentResponse]:
-    return [_agent_capability(registered_agent.name) for registered_agent in list_registered_agents()]
+    return [
+        _agent_capability(registered_agent.name)
+        for registered_agent in list_registered_agents()
+    ]
 
 
 @app.get("/runs/{workflow_id}", response_model=RunStatusResponse)
@@ -167,39 +182,31 @@ async def get_run(workflow_id: str) -> RunStatusResponse:
 
 
 RUN_REQUEST_EXAMPLES = {
-    "travel_concierge_simple": {
-        "summary": "Travel concierge, simple",
-        "description": "Use demo defaults to plan a Tokyo trip.",
-        "value": {
-            "agent": "travel-concierge",
-            "input": "book me a trip to tokyo",
-        },
-    },
-    "travel_concierge_complete": {
-        "summary": "Travel concierge, complete",
-        "description": "Explicit origin, dates, guests, and budget.",
-        "value": {
-            "agent": "travel-concierge",
-            "input": (
-                "Book me a 3-night trip to Tokyo from SFO for 2 people, "
-                "departing 2026-07-10 and returning 2026-07-13, budget $3000."
-            ),
-        },
-    },
-    "research_assistant": {
-        "summary": "Research assistant",
-        "description": "Run the single-agent research demo.",
+    "market_research": {
+        "summary": "Market research",
+        "description": "Research vendor and market context for an operations decision.",
         "value": {
             "agent": "research-assistant",
-            "input": "research Tokyo travel trends",
+            "input": "Research AI dispatch software vendors for midsize logistics operators.",
         },
     },
-    "research-handoff-agent": {
-        "summary": "Research handoff agent",
-        "description": "Run the handoff-based multi-agent research demo.",
+    "decision_memo": {
+        "summary": "Decision memo",
+        "description": "Prepare an evidence-backed recommendation with risks and counterarguments.",
         "value": {
             "agent": "research-handoff-agent",
             "input": queued_multi_agent_demo.SAMPLE_MESSAGE,
+        },
+    },
+    "site_visit_planner": {
+        "summary": "Site visit planner",
+        "description": "Plan business travel for a vendor, customer, or site visit.",
+        "value": {
+            "agent": "travel-concierge",
+            "input": (
+                "Plan a 3-night vendor site visit to Tokyo from SFO for 2 people, "
+                "departing 2026-07-10 and returning 2026-07-13, budget $3000."
+            ),
         },
     },
 }
@@ -217,7 +224,10 @@ async def create_run(
     ),
 ) -> RunResponse:
     run_input = request.input
-    if crash_during_hotel and request.agent == "travel-concierge":
+    if _should_arm_travel_crash(
+        request.agent,
+        crash_during_hotel=crash_during_hotel,
+    ):
         run_input = multi_agent_demo.request_hotel_crash_demo(run_input)
 
     handle = await start_agent(request.agent, run_input)

@@ -20,6 +20,7 @@ const errorMessage = document.querySelector("#error-message");
 
 const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_ATTEMPTS = 90;
+const PENDING_REQUEST_KEY = "operationsResearchHub.pendingRequest";
 
 function setError(message) {
   if (!message) {
@@ -41,6 +42,11 @@ function showLoadingResult() {
   resultKicker.textContent = "Working on your request";
   resultTitle.textContent = "Working on your request";
   resultMessage.textContent = "This can take a moment while the workflow completes.";
+}
+
+function showStillWorkingResult() {
+  showLoadingResult();
+  resultMessage.textContent = "Still working on your request. We'll keep checking for the response.";
 }
 
 function showFinalResult(output) {
@@ -68,22 +74,64 @@ function wait(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
+function savePendingRequest(workflowId, displayName) {
+  const pendingRequest = {
+    workflow_id: workflowId,
+    display_name: displayName,
+    started_at: Date.now(),
+  };
+  window.localStorage.setItem(PENDING_REQUEST_KEY, JSON.stringify(pendingRequest));
+}
+
+function loadPendingRequest() {
+  try {
+    const raw = window.localStorage.getItem(PENDING_REQUEST_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed.workflow_id !== "string") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function clearPendingRequest() {
+  window.localStorage.removeItem(PENDING_REQUEST_KEY);
+}
+
 async function pollRunResult(workflowId) {
   for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt += 1) {
-    const response = await fetch(`/runs/${encodeURIComponent(workflowId)}`);
-    if (!response.ok) {
-      const text = await response.text();
-      throw new Error(text || `HTTP ${response.status}`);
+    try {
+      const response = await fetch(`/runs/${encodeURIComponent(workflowId)}`);
+      if (response.ok) {
+        const run = await response.json();
+        if (run.status === "SUCCESS") return run;
+        if (run.status === "ERROR" || run.status === "CANCELLED") return run;
+      }
+    } catch {
+      // The app may be restarting during the crash demo. Keep polling quietly.
     }
 
-    const run = await response.json();
-    if (run.status === "SUCCESS") return run;
-    if (run.status === "ERROR" || run.status === "CANCELLED") return run;
+    if (attempt > 0) showStillWorkingResult();
 
     await wait(POLL_INTERVAL_MS);
   }
 
   return { status: "TIMEOUT", output: null };
+}
+
+async function watchRun(workflowId) {
+  const run = await pollRunResult(workflowId);
+  if (run.status === "SUCCESS") {
+    clearPendingRequest();
+    showFinalResult(run.output);
+  } else if (run.status === "ERROR" || run.status === "CANCELLED") {
+    clearPendingRequest();
+    showFailedResult("Please try again or ask your operations team for help.");
+  } else {
+    showStillWorkingResult();
+  }
 }
 
 function renderSpecialists() {
@@ -186,17 +234,10 @@ taskForm.addEventListener("submit", async (event) => {
     }
 
     const result = await response.json();
-    const run = await pollRunResult(result.workflow_id);
-    if (run.status === "SUCCESS") {
-      showFinalResult(run.output);
-    } else if (run.status === "TIMEOUT") {
-      showFailedResult("This is taking longer than expected. Please check back later.");
-    } else {
-      showFailedResult("Please try again or ask your operations team for help.");
-    }
+    savePendingRequest(result.workflow_id, state.selectedAgent.display_name);
+    await watchRun(result.workflow_id);
   } catch (error) {
-    showFailedResult("Please try again or ask your operations team for help.");
-    setError(error instanceof Error ? error.message : "Failed to start request.");
+    showFailedResult("We could not start this request. Please try again.");
   } finally {
     submitButton.disabled = false;
     submitButton.textContent = "Start request";
@@ -204,3 +245,9 @@ taskForm.addEventListener("submit", async (event) => {
 });
 
 loadAgents();
+
+const pendingRequest = loadPendingRequest();
+if (pendingRequest) {
+  showStillWorkingResult();
+  watchRun(pendingRequest.workflow_id);
+}
