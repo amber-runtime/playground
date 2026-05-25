@@ -44,6 +44,14 @@ export function sumTokens(steps: Step[]): number {
   }, 0)
 }
 
+export function sumTokensIn(steps: Step[]): number {
+  return steps.reduce((sum, step) => sum + (step.tokens_in ?? 0), 0)
+}
+
+export function sumTokensOut(steps: Step[]): number {
+  return steps.reduce((sum, step) => sum + (step.tokens_out ?? 0), 0)
+}
+
 export function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`
   const s = ms / 1000

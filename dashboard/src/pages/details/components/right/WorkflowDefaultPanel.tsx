@@ -1,11 +1,6 @@
 import { CheckCircle2, XCircle } from 'lucide-react'
 import type { Step, WorkflowInfo, WorkflowStatus } from '../../../../lib/types'
-import {
-  countLlmCalls,
-  countToolCalls,
-  formatTimestamp,
-  humanizeWorkflowName,
-} from '../../../../lib/stepHelpers'
+import { formatTimestamp, humanizeWorkflowName } from '../../../../lib/stepHelpers'
 import { Section } from './Section'
 import { DefList } from './DefList'
 import { CopyButton } from './CopyButton'
@@ -77,8 +72,6 @@ export function WorkflowDefaultPanel({ workflow, steps }: Props) {
     workflow.status === 'SUCCESS' && workflow.output != null
   const recoveries = workflow.recoveries
   const agents = countAgents(steps)
-  const llmCalls = countLlmCalls(steps)
-  const toolCalls = countToolCalls(steps)
 
   const metadataRows: Array<[string, React.ReactNode]> = [
     [
@@ -94,9 +87,6 @@ export function WorkflowDefaultPanel({ workflow, steps }: Props) {
     ...(recoveries > 0
       ? ([['Recoveries', String(recoveries)]] as Array<[string, React.ReactNode]>)
       : []),
-    ['Steps', String(steps.length)],
-    ['LLM calls', String(llmCalls)],
-    ['Tool calls', String(toolCalls)],
     [
       'Agents',
       agents.preflightOnly ? 'Pre-flight only' : String(agents.count),

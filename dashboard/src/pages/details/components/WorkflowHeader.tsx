@@ -5,7 +5,8 @@ import {
   humanizeWorkflowName,
   formatTimestamp,
   formatDuration,
-  sumTokens,
+  sumTokensIn,
+  sumTokensOut,
   estimateCost,
   formatCost,
   countLlmCalls,
@@ -80,8 +81,8 @@ export function WorkflowHeader({ workflow, steps }: Props) {
       ? workflow.updated_at - workflow.created_at
       : null
 
-  const completedSteps = steps.filter((s) => s.completed_at_epoch_ms != null)
-  const totalTokens = sumTokens(steps)
+  const tokensIn = sumTokensIn(steps)
+  const tokensOut = sumTokensOut(steps)
   const recoveries = workflow.recoveries
   const cost = estimateCost(steps)
   const llmCalls = countLlmCalls(steps)
@@ -172,17 +173,11 @@ export function WorkflowHeader({ workflow, steps }: Props) {
           <StatItem label="Duration" value={formatDuration(totalDuration)} />
         )}
 
-        <span
-          className={
-            recoveries > 0
-              ? 'px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30'
-              : 'text-slate-500 text-xs'
-          }
-        >
-          {recoveries > 0 ? `Recovered ${recoveries}×` : '0 recoveries'}
-        </span>
-
-        <StatItem label="Steps" value={String(completedSteps.length)} />
+        {recoveries > 0 && (
+          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30">
+            Recovered {recoveries}×
+          </span>
+        )}
 
         <StatItem
           label={llmCalls === 1 ? 'LLM call' : 'LLM calls'}
@@ -194,8 +189,11 @@ export function WorkflowHeader({ workflow, steps }: Props) {
           value={String(toolCalls)}
         />
 
-        {totalTokens > 0 && (
-          <StatItem label="Tokens" value={totalTokens.toLocaleString()} />
+        {(tokensIn > 0 || tokensOut > 0) && (
+          <StatItem
+            label="Tokens"
+            value={`${tokensIn.toLocaleString()} in · ${tokensOut.toLocaleString()} out`}
+          />
         )}
 
         <StatItem label="Cost" value={formatCost(cost)} />
