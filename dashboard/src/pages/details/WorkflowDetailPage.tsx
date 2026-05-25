@@ -1,11 +1,13 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, RefreshCw } from 'lucide-react'
 import { useWorkflows } from '../../lib/workflowContext'
 import { fetchWorkflowDetail } from '../../lib/api'
+import type { SelectedStepId } from '../../lib/types'
 import { WorkflowHeader } from './components/WorkflowHeader'
-import { FinalAnswerCard } from './components/FinalAnswerCard'
-import { StepTimeline } from './components/StepTimeline'
+import { StepList } from './components/StepList'
+import { StepDetailPanel } from './components/right/StepDetailPanel'
+import { WorkflowDefaultPanel } from './components/right/WorkflowDefaultPanel'
 
 const DETAIL_POLL_DELAY_MS = 2000
 
@@ -17,6 +19,11 @@ export function WorkflowDetailPage() {
   const pollingRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const loadPromiseRef = useRef<Promise<void> | null>(null)
   const loadWorkflowIdRef = useRef<string | null>(null)
+  const [selectedStepId, setSelectedStepId] = useState<SelectedStepId>(null)
+
+  const handleStepClick = (stepId: number) => {
+    setSelectedStepId((prev) => (prev === stepId ? null : stepId))
+  }
 
   const load = async () => {
     if (!id) return
@@ -103,24 +110,42 @@ export function WorkflowDetailPage() {
 
       <WorkflowHeader workflow={data.workflow} steps={data.steps} />
 
-      <main className="max-w-4xl mx-auto px-6 py-6 space-y-4">
-        {/* TODO: input surfacing is pending a backend fix — topic card hidden until available */}
+      <main className="max-w-7xl mx-auto px-6 py-6">
+        {(() => {
+          const selectedStep =
+            selectedStepId != null
+              ? data.steps.find((s) => s.step_id === selectedStepId) ?? null
+              : null
 
-        <FinalAnswerCard output={data.workflow.output} status={data.workflow.status} />
-
-        {data.workflow.status === 'PENDING' && data.steps.length === 0 && (
-          <div className="bg-slate-900 border border-slate-800 rounded-lg px-5 py-8 text-center">
-            <div className="flex items-center justify-center gap-2 text-amber-400 mb-2">
-              <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-              <span className="text-sm">Waiting for first step…</span>
+          return (
+            <div className="grid grid-cols-5 gap-4 items-start">
+              <div className="col-span-3 min-w-0">
+                {data.steps.length === 0 ? (
+                  <div className="bg-slate-900 border border-slate-800 rounded-lg px-5 py-8 text-center">
+                    <div className="flex items-center justify-center gap-2 text-amber-400 mb-2">
+                      <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                      <span className="text-sm">Waiting for first step…</span>
+                    </div>
+                    <p className="text-xs text-slate-500">Polling every 2 seconds</p>
+                  </div>
+                ) : (
+                  <StepList
+                    steps={data.steps}
+                    selectedStepId={selectedStepId}
+                    onStepClick={handleStepClick}
+                  />
+                )}
+              </div>
+              <aside className="col-span-2 sticky top-0 h-screen overflow-y-auto bg-slate-900 border border-slate-800 rounded-lg">
+                {selectedStep != null ? (
+                  <StepDetailPanel step={selectedStep} />
+                ) : (
+                  <WorkflowDefaultPanel workflow={data.workflow} steps={data.steps} />
+                )}
+              </aside>
             </div>
-            <p className="text-xs text-slate-500">Polling every 2 seconds</p>
-          </div>
-        )}
-
-        {data.steps.length > 0 && (
-          <StepTimeline workflow={data.workflow} steps={data.steps} />
-        )}
+          )
+        })()}
       </main>
 
       {data.workflow.status === 'PENDING' && (

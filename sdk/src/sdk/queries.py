@@ -31,10 +31,20 @@ def _wf_to_dict(w, *, include_output: bool = False) -> dict:
     return record
 
 
-async def list_workflows(status: Optional[str] = None, limit: int = 50) -> list[dict]:
+async def list_workflows(
+    status: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[dict]:
     """List workflows from DBOS, newest first."""
     from dbos import DBOS
-    kwargs: dict = {"limit": limit, "sort_desc": True, "load_input": False, "load_output": False}
+    kwargs: dict = {
+        "limit": limit,
+        "offset": offset,
+        "sort_desc": True,
+        "load_input": False,
+        "load_output": False,
+    }
     if status:
         kwargs["status"] = status
     results = await DBOS.list_workflows_async(**kwargs)

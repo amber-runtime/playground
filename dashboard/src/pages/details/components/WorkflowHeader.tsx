@@ -1,13 +1,20 @@
 import { useState } from 'react'
-import { Copy, Check } from 'lucide-react'
-import type { WorkflowInfo, WorkflowStatus } from '../../../lib/types'
+import { RotateCcw, Square, Loader2 } from 'lucide-react'
+import type { WorkflowInfo, WorkflowStatus, Step } from '../../../lib/types'
 import {
   humanizeWorkflowName,
   formatTimestamp,
   formatDuration,
-  sumTokens,
+  sumTokensIn,
+  sumTokensOut,
+  estimateCost,
+  formatCost,
+  countLlmCalls,
+  countToolCalls,
 } from '../../../lib/stepHelpers'
-import type { Step } from '../../../lib/types'
+import { resumeWorkflow, cancelWorkflow } from '../../../lib/api'
+import { showToast } from '../../../shared/Toast'
+import { CopyButton } from './right/CopyButton'
 
 interface Props {
   workflow: WorkflowInfo
@@ -21,38 +28,103 @@ const STATUS_STYLES: Record<WorkflowStatus, string> = {
   CANCELLED: 'bg-slate-800 text-slate-400 border border-slate-700',
 }
 
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false)
-  const copy = () => {
-    navigator.clipboard.writeText(text).catch(() => undefined)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 1500)
-  }
+function StatItem({ label, value }: { label: string; value: string }) {
+  return (
+    <span>
+      <span className="text-slate-500">{label}: </span>
+      <span className="text-slate-300 font-medium">{value}</span>
+    </span>
+  )
+}
+
+interface ActionButtonProps {
+  icon: typeof RotateCcw
+  label: string
+  onClick: () => void
+  enabled: boolean
+  pending: boolean
+  disabledReason: string
+}
+
+function ActionButton({
+  icon: Icon,
+  label,
+  onClick,
+  enabled,
+  pending,
+  disabledReason,
+}: ActionButtonProps) {
+  const disabled = !enabled || pending
   return (
     <button
-      onClick={copy}
-      className="ml-1.5 p-0.5 rounded hover:bg-slate-700 text-slate-500 hover:text-slate-300 transition-colors"
-      title="Copy workflow ID"
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      title={enabled ? label : disabledReason}
+      className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+        disabled
+          ? 'border-slate-800 text-slate-600 bg-slate-900 cursor-not-allowed opacity-60'
+          : 'border-slate-700 text-slate-200 bg-slate-800 hover:bg-slate-700'
+      }`}
     >
-      {copied ? <Check size={12} /> : <Copy size={12} />}
+      {pending ? <Loader2 size={13} className="animate-spin" /> : <Icon size={13} />}
+      {label}
     </button>
   )
 }
 
 export function WorkflowHeader({ workflow, steps }: Props) {
+  const [pending, setPending] = useState<'resume' | 'cancel' | null>(null)
+
   const totalDuration =
     workflow.updated_at > workflow.created_at
       ? workflow.updated_at - workflow.created_at
       : null
 
-  const completedSteps = steps.filter((s) => s.completed_at_epoch_ms != null)
-  const totalTokens = sumTokens(steps)
-  const recoveries = workflow.recovery_attempts ?? 0
+  const tokensIn = sumTokensIn(steps)
+  const tokensOut = sumTokensOut(steps)
+  const recoveries = workflow.recoveries
+  const cost = estimateCost(steps)
+  const llmCalls = countLlmCalls(steps)
+  const toolCalls = countToolCalls(steps)
 
   const shortId =
     workflow.workflow_id.length > 20
       ? `${workflow.workflow_id.slice(0, 8)}…${workflow.workflow_id.slice(-4)}`
       : workflow.workflow_id
+
+  const canResume = workflow.status === 'ERROR'
+  const canCancel = workflow.status === 'PENDING'
+
+  const handleResume = async () => {
+    setPending('resume')
+    try {
+      await resumeWorkflow(workflow.workflow_id)
+      showToast('Workflow resumed')
+    } catch (err) {
+      showToast(
+        'Resume failed',
+        err instanceof Error ? err.message : 'Unknown error',
+      )
+    } finally {
+      setPending(null)
+    }
+  }
+
+  const handleCancel = async () => {
+    setPending('cancel')
+    try {
+      await cancelWorkflow(workflow.workflow_id)
+      showToast('Workflow cancel requested')
+    } catch (err) {
+      showToast(
+        'Cancel failed',
+        err instanceof Error ? err.message : 'Unknown error',
+      )
+    } finally {
+      setPending(null)
+    }
+  }
 
   return (
     <div className="bg-slate-900 border-b border-slate-800 px-6 py-4">
@@ -66,10 +138,29 @@ export function WorkflowHeader({ workflow, steps }: Props) {
         >
           {workflow.status}
         </span>
-        <span className="flex items-center font-mono text-xs text-slate-400 ml-auto">
+        <span className="flex items-center font-mono text-xs text-slate-400">
           {shortId}
-          <CopyButton text={workflow.workflow_id} />
+          <CopyButton text={workflow.workflow_id} label="Copy workflow ID" />
         </span>
+
+        <div className="ml-auto flex items-center gap-2">
+          <ActionButton
+            icon={RotateCcw}
+            label="Resume"
+            onClick={handleResume}
+            enabled={canResume}
+            pending={pending === 'resume'}
+            disabledReason="Resume is only available for errored workflows."
+          />
+          <ActionButton
+            icon={Square}
+            label="Cancel"
+            onClick={handleCancel}
+            enabled={canCancel}
+            pending={pending === 'cancel'}
+            disabledReason="Cancel is only available for running workflows."
+          />
+        </div>
       </div>
 
       {/* Stats row */}
@@ -82,34 +173,31 @@ export function WorkflowHeader({ workflow, steps }: Props) {
           <StatItem label="Duration" value={formatDuration(totalDuration)} />
         )}
 
-        <span
-          className={
-            recoveries > 0
-              ? 'px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30'
-              : 'text-slate-500 text-xs'
-          }
-        >
-          {recoveries > 0 ? `Recovered ${recoveries}×` : '0 recoveries'}
-        </span>
+        {recoveries > 0 && (
+          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30">
+            Recovered {recoveries}×
+          </span>
+        )}
 
-        <StatItem label="Steps" value={String(completedSteps.length)} />
+        <StatItem
+          label={llmCalls === 1 ? 'LLM call' : 'LLM calls'}
+          value={String(llmCalls)}
+        />
 
-        {totalTokens > 0 && (
+        <StatItem
+          label={toolCalls === 1 ? 'Tool call' : 'Tool calls'}
+          value={String(toolCalls)}
+        />
+
+        {(tokensIn > 0 || tokensOut > 0) && (
           <StatItem
             label="Tokens"
-            value={totalTokens.toLocaleString()}
+            value={`${tokensIn.toLocaleString()} in · ${tokensOut.toLocaleString()} out`}
           />
         )}
+
+        <StatItem label="Cost" value={formatCost(cost)} />
       </div>
     </div>
-  )
-}
-
-function StatItem({ label, value }: { label: string; value: string }) {
-  return (
-    <span>
-      <span className="text-slate-500">{label}: </span>
-      <span className="text-slate-300 font-medium">{value}</span>
-    </span>
   )
 }
