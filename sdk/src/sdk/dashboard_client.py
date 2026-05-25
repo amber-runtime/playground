@@ -43,9 +43,11 @@ class DashboardClient:
         *,
         status: Optional[str] = None,
         limit: int = 50,
+        offset: int = 0,
     ) -> list[dict]:
         kwargs: dict = {
             "limit": limit,
+            "offset": offset,
             "sort_desc": True,
             "load_input": False,
             "load_output": False,

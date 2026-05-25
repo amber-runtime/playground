@@ -27,6 +27,8 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
+from pydantic import BaseModel
+
 from sdk.dashboard_client import DashboardClient
 from sdk.models import WorkflowDetail, WorkflowSummary
 
@@ -67,16 +69,28 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/workflows", response_model=list[WorkflowSummary])
+class WorkflowListPage(BaseModel):
+    workflows: list[WorkflowSummary]
+    has_more: bool
+
+
+@app.get("/workflows", response_model=WorkflowListPage)
 async def get_workflows(
     status: Optional[str] = Query(
         None, description="Filter by status (PENDING, SUCCESS, ERROR)"
     ),
-    limit: int = Query(50, ge=1, le=200, description="Maximum results to return"),
+    limit: int = Query(50, ge=1, le=1000, description="Maximum results to return"),
+    offset: int = Query(0, ge=0, description="Number of results to skip"),
 ):
-    """List workflows from DBOS, newest first."""
-    rows = await get_dashboard_client().list_workflows(status=status, limit=limit)
-    return [
+    """List workflows from DBOS, newest first. Paginated via limit + offset."""
+    # Over-fetch by one row to detect has_more without a COUNT query.
+    rows = await get_dashboard_client().list_workflows(
+        status=status, limit=limit + 1, offset=offset
+    )
+    has_more = len(rows) > limit
+    if has_more:
+        rows = rows[:limit]
+    workflows = [
         WorkflowSummary(
             workflow_id=r["workflow_id"],
             name=r["name"],
@@ -87,6 +101,7 @@ async def get_workflows(
         )
         for r in rows
     ]
+    return WorkflowListPage(workflows=workflows, has_more=has_more)
 
 
 @app.get("/workflows/{workflow_id}", response_model=WorkflowDetail)

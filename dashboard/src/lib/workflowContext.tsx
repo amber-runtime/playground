@@ -4,13 +4,17 @@ import type { WorkflowSummary, WorkflowDetail } from './types'
 import { fetchWorkflows } from './api'
 
 const VISIBLE_LIST_POLL_DELAY_MS = 5000
+const PAGE_SIZE = 50
 
 interface WorkflowContextType {
   workflows: WorkflowSummary[]
   workflowDetails: Record<string, WorkflowDetail>
   loading: boolean
+  loadingMore: boolean
+  hasMore: boolean
   error: string | null
   refresh: () => Promise<void>
+  loadMore: () => Promise<void>
   setDetail: (id: string, detail: WorkflowDetail) => void
 }
 
@@ -20,16 +24,22 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
   const [workflows, setWorkflows] = useState<WorkflowSummary[]>([])
   const [workflowDetails, setWorkflowDetails] = useState<Record<string, WorkflowDetail>>({})
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const loadPromiseRef = useRef<Promise<void> | null>(null)
+  const loadedCountRef = useRef<number>(PAGE_SIZE)
 
-  const load = useCallback(async () => {
+  // Re-fetch the currently loaded range from offset 0. Keeps polling refreshes
+  // from shrinking the user's loaded view.
+  const refreshLoadedRange = useCallback(async () => {
     if (!loadPromiseRef.current) {
       loadPromiseRef.current = (async () => {
         try {
-          const data = await fetchWorkflows()
-          setWorkflows(data)
+          const page = await fetchWorkflows({ limit: loadedCountRef.current, offset: 0 })
+          setWorkflows(page.workflows)
+          setHasMore(page.hasMore)
           setError(null)
         } catch (err) {
           setError(err instanceof Error ? err.message : 'Failed to fetch workflows')
@@ -43,8 +53,32 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const refresh = useCallback(async () => {
-    await load()
-  }, [load])
+    await refreshLoadedRange()
+  }, [refreshLoadedRange])
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return
+    setLoadingMore(true)
+    try {
+      const page = await fetchWorkflows({
+        limit: PAGE_SIZE,
+        offset: loadedCountRef.current,
+      })
+      setWorkflows((prev) => {
+        // Deduplicate by workflow_id in case a new workflow arrived at the top
+        // between the last poll and this load-more call.
+        const seen = new Set(prev.map((w) => w.workflow_id))
+        const additions = page.workflows.filter((w) => !seen.has(w.workflow_id))
+        return prev.concat(additions)
+      })
+      loadedCountRef.current += page.workflows.length
+      setHasMore(page.hasMore)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load more workflows')
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [hasMore, loadingMore])
 
   useEffect(() => {
     let cancelled = false
@@ -66,7 +100,7 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
     }
 
     const poll = async () => {
-      await load()
+      await refreshLoadedRange()
       scheduleNext()
     }
 
@@ -86,7 +120,7 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
       clearPollingTimeout()
       document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [load])
+  }, [refreshLoadedRange])
 
   const setDetail = useCallback((id: string, detail: WorkflowDetail) => {
     setWorkflowDetails((prev) => ({ ...prev, [id]: detail }))
@@ -94,7 +128,17 @@ export function WorkflowProvider({ children }: { children: ReactNode }) {
 
   return (
     <WorkflowContext.Provider
-      value={{ workflows, workflowDetails, loading, error, refresh, setDetail }}
+      value={{
+        workflows,
+        workflowDetails,
+        loading,
+        loadingMore,
+        hasMore,
+        error,
+        refresh,
+        loadMore,
+        setDetail,
+      }}
     >
       {children}
     </WorkflowContext.Provider>

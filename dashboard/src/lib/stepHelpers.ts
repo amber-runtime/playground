@@ -1,4 +1,4 @@
-import type { Step, AgentGroup } from './types'
+import type { Step, AgentGroup, WorkflowInfo } from './types'
 
 export type StepKind = 'llm' | 'tool' | 'sleep' | 'other'
 
@@ -141,4 +141,111 @@ export function groupStepsByAgent(steps: Step[]): AgentGroup[] {
 
   flush()
   return groups
+}
+
+const WORKFLOW_WINDOW_MIN_MS = 5000
+const BAR_MIN_WIDTH_PCT = 0.5
+
+export interface StepBarGeometry {
+  leftPct: number
+  widthPct: number
+  inProgress: boolean
+}
+
+export function computeWorkflowWindow(
+  workflow: WorkflowInfo,
+  steps: Step[],
+): { start: number; end: number } {
+  const start = workflow.created_at
+  if (steps.length === 0) return { start, end: start + WORKFLOW_WINDOW_MIN_MS }
+  const last = steps[steps.length - 1]
+  const lastEnd = last.completed_at_epoch_ms ?? last.started_at_epoch_ms ?? start
+  return { start, end: Math.max(lastEnd, start + WORKFLOW_WINDOW_MIN_MS) }
+}
+
+export function computeStepBarGeometry(
+  step: Step,
+  workflowStart: number,
+  workflowEnd: number,
+): StepBarGeometry {
+  const totalDuration = Math.max(workflowEnd - workflowStart, 1)
+  const stepStart = step.started_at_epoch_ms ?? workflowStart
+  const inProgress = step.completed_at_epoch_ms == null
+  const stepEnd = step.completed_at_epoch_ms ?? workflowEnd
+  const leftPct = ((stepStart - workflowStart) / totalDuration) * 100
+  const widthPct = Math.max(((stepEnd - stepStart) / totalDuration) * 100, BAR_MIN_WIDTH_PCT)
+  return { leftPct, widthPct, inProgress }
+}
+
+// USD per million tokens. Prices accurate as of late 2025 — update when the
+// model lineup or OpenAI pricing changes. Matching is substring-based against
+// step.llm_model so date-stamped variants (e.g. "gpt-4o-2024-08-06") and
+// provider prefixes still match. More specific keys must come first.
+const MODEL_PRICING: Array<{ match: string; in: number; out: number }> = [
+  { match: 'gpt-5.4-mini',   in: 0.15,  out: 0.60 },
+  { match: 'gpt-5.4-turbo',  in: 10.0,  out: 30.0 },
+  { match: 'gpt-5.4',        in: 2.50,  out: 10.0 },
+  { match: 'gpt-4o-mini',    in: 0.15,  out: 0.60 },
+  { match: 'gpt-4-turbo',    in: 10.0,  out: 30.0 },
+  { match: 'gpt-4o',         in: 2.50,  out: 10.0 },
+]
+
+function priceFor(model: string): { in: number; out: number } | null {
+  const lower = model.toLowerCase()
+  for (const entry of MODEL_PRICING) {
+    if (lower.includes(entry.match)) return { in: entry.in, out: entry.out }
+  }
+  return null
+}
+
+export function estimateCost(steps: Step[]): number | null {
+  let total = 0
+  let priced = 0
+  for (const step of steps) {
+    if (!step.llm_model) continue
+    if (step.tokens_in == null && step.tokens_out == null) continue
+    const price = priceFor(step.llm_model)
+    if (!price) continue
+    total += ((step.tokens_in ?? 0) * price.in) / 1_000_000
+    total += ((step.tokens_out ?? 0) * price.out) / 1_000_000
+    priced++
+  }
+  return priced === 0 ? null : total
+}
+
+export function formatCost(cost: number | null): string {
+  if (cost == null) return '—'
+  if (cost > 0 && cost < 0.01) return '<$0.01'
+  return `$${cost.toFixed(2)}`
+}
+
+export function countLlmCalls(steps: Step[]): number {
+  return steps.reduce((n, s) => (getStepKind(s) === 'llm' ? n + 1 : n), 0)
+}
+
+export function countToolCalls(steps: Step[]): number {
+  return steps.reduce((n, s) => (getStepKind(s) === 'tool' ? n + 1 : n), 0)
+}
+
+// Case-insensitive substring match across the user-visible step fields.
+// Empty query returns an empty set; the caller treats that as "no filter."
+export function filterStepsBySearch(steps: Step[], query: string): Set<number> {
+  const q = query.trim().toLowerCase()
+  const matches = new Set<number>()
+  if (q === '') return matches
+  for (const step of steps) {
+    if (step.step_id == null) continue
+    const haystack = [
+      humanizeStepName(step.function_name),
+      step.function_name,
+      step.tool_name,
+      step.agent_name,
+      step.llm_model,
+    ]
+      .filter((s): s is string => typeof s === 'string')
+      .join(' ')
+      .toLowerCase()
+    if (haystack.includes(q)) matches.add(step.step_id)
+  }
+  return matches
 }

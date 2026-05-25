@@ -1,0 +1,91 @@
+import {
+  Brain,
+  Clock,
+  Search,
+  Wrench,
+  CheckCircle2,
+  XCircle,
+} from 'lucide-react'
+import type { Step } from '../../../lib/types'
+import {
+  formatDuration,
+  getStepKind,
+  humanizeStepName,
+  stepDurationMs,
+} from '../../../lib/stepHelpers'
+
+interface Props {
+  step: Step
+  isSelected: boolean
+  onClick: (stepId: number) => void
+}
+
+function StepIcon({ step }: { step: Step }) {
+  const kind = getStepKind(step)
+  const cls = 'shrink-0'
+  if (kind === 'llm') return <Brain size={13} className={`${cls} text-slate-400`} />
+  if (kind === 'sleep') return <Clock size={13} className={`${cls} text-slate-600`} />
+  if (step.tool_name === 'search_web' || step.function_name === 'search_web')
+    return <Search size={13} className={`${cls} text-emerald-400`} />
+  return <Wrench size={13} className={`${cls} text-sky-400`} />
+}
+
+function StatusDot({ step }: { step: Step }) {
+  if (step.status === 'ERROR')
+    return <XCircle size={13} className="text-red-400 shrink-0" />
+  if (step.completed_at_epoch_ms == null) {
+    return (
+      <span className="relative inline-flex h-3 w-3 shrink-0">
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
+        <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500" />
+      </span>
+    )
+  }
+  return <CheckCircle2 size={13} className="text-emerald-400 shrink-0" />
+}
+
+export function StepRow({ step, isSelected, onClick }: Props) {
+  const stepId = step.step_id
+  const kind = getStepKind(step)
+  const hasError = step.status === 'ERROR'
+  const inProgress = step.completed_at_epoch_ms == null
+  const dur = stepDurationMs(step)
+
+  const name = step.event_type === 'tool_call'
+    ? humanizeStepName(step.tool_name ?? step.function_name)
+    : humanizeStepName(step.function_name)
+
+  const rowBg = isSelected
+    ? 'bg-slate-800 border-l-amber-500'
+    : 'border-l-transparent hover:bg-slate-800/50'
+
+  const nameClass = hasError
+    ? 'text-red-300'
+    : kind === 'sleep'
+    ? 'text-slate-500'
+    : 'text-slate-200'
+
+  const tooltip = `${name}${dur != null ? ` · ${formatDuration(dur)}` : ' · in progress'}`
+
+  return (
+    <button
+      type="button"
+      onClick={() => stepId != null && onClick(stepId)}
+      disabled={stepId == null}
+      title={tooltip}
+      className={`group w-full grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 h-8 px-3 text-left border-l-2 transition-colors ${rowBg}`}
+    >
+      {/* Left: status, kind icon, name */}
+      <div className="flex items-center gap-2 min-w-0">
+        <StatusDot step={step} />
+        <StepIcon step={step} />
+        <span className={`text-xs truncate ${nameClass}`}>{name}</span>
+      </div>
+
+      {/* Right: duration */}
+      <span className="text-[11px] font-mono text-slate-500 tabular-nums text-right shrink-0">
+        {inProgress ? 'running…' : dur != null ? formatDuration(dur) : '—'}
+      </span>
+    </button>
+  )
+}

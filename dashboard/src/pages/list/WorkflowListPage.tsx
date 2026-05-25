@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { RefreshCw, CheckCircle2, XCircle, AlertCircle } from 'lucide-react'
+import { RefreshCw, CheckCircle2, XCircle, AlertCircle, Loader2 } from 'lucide-react'
 import type { WorkflowSummary, WorkflowStatus } from '../../lib/types'
 import { useWorkflows } from '../../lib/workflowContext'
 import { humanizeWorkflowName, formatRelativeTime, formatDuration } from '../../lib/stepHelpers'
@@ -56,7 +56,7 @@ function workflowDuration(w: WorkflowSummary, now: number): string {
 
 export function WorkflowListPage() {
   const navigate = useNavigate()
-  const { workflows, loading, error, refresh } = useWorkflows()
+  const { workflows, loading, loadingMore, hasMore, error, refresh, loadMore } = useWorkflows()
   const [filter, setFilter] = useState<Filter>('all')
   const [now, setNow] = useState(Date.now())
 
@@ -160,7 +160,12 @@ export function WorkflowListPage() {
           <div className="bg-slate-900 border border-slate-800 rounded-lg overflow-hidden">
             {filtered.length === 0 ? (
               <div className="px-4 py-12 text-center text-sm text-slate-500">
-                {EMPTY_MESSAGES[filter]}
+                <p>{EMPTY_MESSAGES[filter]}</p>
+                {hasMore && filter !== 'all' && (
+                  <p className="mt-1 text-xs text-slate-600">
+                    Older workflows haven&rsquo;t been loaded — try Load more below.
+                  </p>
+                )}
               </div>
             ) : (
               <table className="w-full border-collapse">
@@ -206,12 +211,24 @@ export function WorkflowListPage() {
                         {workflowDuration(w, now)}
                       </td>
                       <td className="pr-4 py-3.5 text-right">
-                        <RecoveryPill count={w.recovery_attempts ?? 0} />
+                        <RecoveryPill count={w.recoveries} />
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            )}
+
+            {hasMore && (
+              <button
+                type="button"
+                onClick={() => void loadMore()}
+                disabled={loadingMore}
+                className="w-full px-4 py-3 border-t border-slate-800 text-sm text-slate-300 hover:bg-slate-800/50 disabled:text-slate-600 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2"
+              >
+                {loadingMore && <Loader2 size={13} className="animate-spin" />}
+                {loadingMore ? 'Loading…' : 'Load more'}
+              </button>
             )}
           </div>
         )}

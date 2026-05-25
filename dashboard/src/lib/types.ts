@@ -26,7 +26,8 @@ export interface WorkflowInfo {
   status: WorkflowStatus
   created_at: number
   updated_at: number
-  recovery_attempts: number | null
+  recovery_attempts: number | null   // raw DBOS counter; 1 = first run, no recovery
+  recoveries: number                 // derived: max(0, recovery_attempts - 1)
   output: string | null
 }
 
@@ -41,7 +42,8 @@ export interface WorkflowSummary {
   status: WorkflowStatus
   created_at: number
   completed_at: number
-  recovery_attempts: number | null
+  recovery_attempts: number | null   // raw DBOS counter; 1 = first run, no recovery
+  recoveries: number                 // derived: max(0, recovery_attempts - 1)
 }
 
 export interface AgentGroup {
@@ -50,4 +52,11 @@ export interface AgentGroup {
   startedAtMs: number | null
   endedAtMs: number | null
   totalDurationMs: number | null
+}
+
+export type SelectedStepId = number | null
+
+export interface WorkflowListPage {
+  workflows: WorkflowSummary[]
+  hasMore: boolean
 }
