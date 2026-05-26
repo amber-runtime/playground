@@ -21,6 +21,7 @@ import { CopyButton } from './right/CopyButton'
 interface Props {
   workflow: WorkflowInfo
   steps: Step[]
+  onActionSuccess?: () => void
 }
 
 const STATUS_STYLES: Record<WorkflowStatus, string> = {
@@ -147,7 +148,7 @@ function ActionButton({
   )
 }
 
-export function WorkflowHeader({ workflow, steps }: Props) {
+export function WorkflowHeader({ workflow, steps, onActionSuccess }: Props) {
   const [pending, setPending] = useState<'resume' | 'cancel' | null>(null)
 
   const totalDuration =
@@ -174,6 +175,7 @@ export function WorkflowHeader({ workflow, steps }: Props) {
     setPending('resume')
     try {
       await resumeWorkflow(workflow.workflow_id)
+      onActionSuccess?.()
       showToast('Workflow resumed')
     } catch (err) {
       showToast(
@@ -189,6 +191,7 @@ export function WorkflowHeader({ workflow, steps }: Props) {
     setPending('cancel')
     try {
       await cancelWorkflow(workflow.workflow_id)
+      onActionSuccess?.()
       showToast('Workflow cancel requested')
     } catch (err) {
       showToast(
