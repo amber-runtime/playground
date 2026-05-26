@@ -16,7 +16,7 @@ import {
 import { Section } from './Section'
 import { JsonBlock } from './JsonBlock'
 import { LLMMessagesBlock } from './LLMMessagesBlock'
-import { SearchWebResultsBlock } from './SearchWebResultsBlock'
+import { OutputRenderer } from './OutputRenderer'
 import { DefList } from './DefList'
 
 interface Props {
@@ -84,8 +84,6 @@ export function StepDetailPanel({ step }: Props) {
   const llmHasIO = kind === 'llm' && (step.llm_input != null || step.llm_output != null)
   const llmHasTokens =
     kind === 'llm' && (step.tokens_in != null || step.tokens_out != null)
-  const isSearchWeb =
-    step.tool_name === 'search_web' || step.function_name === 'search_web'
 
   return (
     <div>
@@ -116,7 +114,7 @@ export function StepDetailPanel({ step }: Props) {
           e.g., tool calls whose agent_events row got dropped at the data layer. */}
       {kind === 'other' && step.step_output != null && (
         <Section title="Step output" defaultExpanded>
-          <JsonBlock value={step.step_output} />
+          <OutputRenderer value={step.step_output} />
         </Section>
       )}
 
@@ -164,13 +162,7 @@ export function StepDetailPanel({ step }: Props) {
             {step.tool_result != null && (
               <div>
                 <SectionLabel>Result</SectionLabel>
-                {isSearchWeb ? (
-                  <SearchWebResultsBlock raw={step.tool_result} />
-                ) : (
-                  <pre className="bg-slate-950 border border-slate-800 rounded p-3 text-xs text-slate-300 overflow-x-auto max-h-64 overflow-y-auto whitespace-pre-wrap leading-relaxed">
-                    {step.tool_result}
-                  </pre>
-                )}
+                <OutputRenderer value={step.tool_result} />
               </div>
             )}
             {step.tool_args == null && step.tool_result == null && (
