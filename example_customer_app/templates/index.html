@@ -71,18 +71,44 @@
             </div>
           </form>
 
-          <div id="result-panel" class="result-panel" hidden>
-            <div id="loading-indicator" class="loading-indicator" aria-hidden="true"></div>
-            <p id="result-kicker" class="eyebrow">Working on your request</p>
-            <h3 id="result-title">Working on your request</h3>
-            <p id="result-message" class="result-message">
-              This can take a moment while the workflow completes.
-            </p>
-            <div id="result-output" class="result-output" hidden></div>
-          </div>
-
           <p id="error-message" class="error-message" role="alert" hidden></p>
         </section>
+      </section>
+
+      <section class="results-workbench" aria-label="Request results">
+        <div class="requests-pane">
+          <div class="workbench-heading">
+            <div>
+              <p class="eyebrow">Recent requests</p>
+              <h3>Request queue</h3>
+            </div>
+            <span id="request-count" class="request-count">0</span>
+          </div>
+          <div id="request-list" class="request-list" aria-live="polite">
+            <div class="empty-state">Started requests will appear here.</div>
+          </div>
+        </div>
+
+        <div id="response-viewer" class="response-viewer">
+          <div id="viewer-empty-state" class="viewer-empty-state">
+            <p class="eyebrow">Response viewer</p>
+            <h3>No request selected</h3>
+            <p>Start a request to see its status and response here.</p>
+          </div>
+          <div id="viewer-content" class="viewer-content" hidden>
+            <div class="viewer-header">
+              <div>
+                <p id="viewer-kicker" class="eyebrow">Working on your request</p>
+                <h3 id="viewer-title">Working on your request</h3>
+              </div>
+              <span id="viewer-status" class="status-pill">Working</span>
+            </div>
+            <p id="viewer-message" class="result-message">
+              This can take a moment while the workflow completes.
+            </p>
+            <div id="viewer-output" class="result-output" hidden></div>
+          </div>
+        </div>
       </section>
     </main>
 
