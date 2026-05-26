@@ -118,7 +118,7 @@ async def sleep(*args, **kwargs):
     return await DBOS.sleep_async(*args, **kwargs)
 
 
-async def agentic_runner(*args, **kwargs):
+async def agent_runner(*args, **kwargs):
     return await DBOSRunner.run(*args, **kwargs)
 
 

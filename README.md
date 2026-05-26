@@ -90,7 +90,7 @@ The SDK lives in `sdk/src/sdk/`. Since it's installed as an editable package, yo
 **Current public API:**
 
 ```python
-from sdk import Runtime, AgentService, WorkerService, workflow, step, sleep, agentic_runner
+from sdk import Runtime, AgentService, WorkerService, workflow, step, sleep, agent_runner
 ```
 
 | Function | What it does |
@@ -98,10 +98,10 @@ from sdk import Runtime, AgentService, WorkerService, workflow, step, sleep, age
 | `@workflow()` | Mark a function as a durable workflow |
 | `@step()` | Mark a function as a checkpointed step |
 | `sleep(seconds)` | Durable sleep — skips elapsed time on crash recovery |
-| `agentic_runner(agent, prompt)` | Run an OpenAI Agents SDK agent through DBOS |
+| `agent_runner(agent, prompt)` | Run an OpenAI Agents SDK agent through DBOS |
 | `Runtime.start()` | Configure and launch DBOS once for the current process |
 | `AgentService.run(agent_name, input)` | Start a registered orchestration workflow immediately |
-| `AgentService.enqueue(agent_name, input)` | Add a registered orchestration workflow to the default DBOS queue |
+| `AgentService.enqueue(agent_name, input)` | Submit a registered orchestration workflow to the default DBOS queue |
 | `WorkerService.run()` | Launch a queue worker for registered orchestration workflows |
 
 Agent workflows are registered when their modules are imported. In an app,
@@ -113,7 +113,9 @@ Use `AgentService.run(...)` when the API process should start work immediately.
 Use `AgentService.enqueue(...)` when the API should return quickly and let a
 worker process drain queued work. In a split deployment, initialize the API
 runtime with `listen_queues=[]` so it can enqueue work without draining user
-queues.
+queues. Queue configuration is owned by the worker runtime; enqueue submission
+does not require an active worker, but queued work will not execute until a
+worker runtime is running and listening on the queue.
 
 API-side enqueue:
 

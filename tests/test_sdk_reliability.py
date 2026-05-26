@@ -614,7 +614,7 @@ class AgentRegistryTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
-    async def test_agent_service_enqueue_registers_queue_and_enqueues_registered_workflow(self):
+    async def test_agent_service_enqueue_submits_registered_workflow_without_queue_registration(self):
         async def run_topic(topic: str) -> str:
             return topic
 
@@ -625,14 +625,7 @@ class AgentRegistryTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(handle.workflow_id, "workflow-enqueued")
         self.assertEqual(len(self.DBOS.init_calls), 1)
-        self.assertEqual(
-            self.DBOS.registered_queues[0][0],
-            "agent-runs",
-        )
-        self.assertEqual(
-            self.DBOS.registered_queues[0][1]["on_conflict"],
-            "never_update",
-        )
+        self.assertEqual(self.DBOS.registered_queues, [])
         self.assertEqual(
             self.DBOS.enqueued_workflows,
             [("agent-runs", workflow_fn, "hello")],
@@ -697,7 +690,7 @@ class DemoRegistrationTests(unittest.TestCase):
         )
         sdk = types.ModuleType("sdk")
         sdk.register_agent = self.decorators.register_agent
-        sdk.agentic_runner = self.decorators.agentic_runner
+        sdk.agent_runner = self.decorators.agent_runner
         sdk.logger = self.decorators.logger
         sdk.sleep = self.decorators.sleep
         sdk.step = self.decorators.step

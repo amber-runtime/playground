@@ -18,6 +18,15 @@ DEFAULT_AGENT_QUEUE = "agent-runs"
 
 _init_lock = threading.Lock()
 _initialized = False
+_runtime_owner_id: int | None = None
+_default_runtime: "Runtime" | None = None
+
+
+def _single_runtime_error() -> RuntimeError:
+    return RuntimeError(
+        "Only one Runtime may be started per process. "
+        "Reuse the existing Runtime for AgentService and WorkerService."
+    )
 
 
 class Runtime:
@@ -39,12 +48,20 @@ class Runtime:
         before_launch: Callable[[DBOSConfig], None] | None = None,
     ) -> None:
         _start_dbos_runtime(
+            owner_id=id(self),
             name=self.name,
             db_url=self.db_url,
             conductor_key=self.conductor_key,
             listen_queues=listen_queues,
             before_launch=before_launch,
         )
+
+
+def _get_default_runtime() -> Runtime:
+    global _default_runtime
+    if _default_runtime is None:
+        _default_runtime = Runtime()
+    return _default_runtime
 
 
 class AgentService:
@@ -54,7 +71,7 @@ class AgentService:
         *,
         default_queue_name: str = DEFAULT_AGENT_QUEUE,
     ) -> None:
-        self.runtime = runtime or Runtime()
+        self.runtime = runtime or _get_default_runtime()
         self.default_queue_name = default_queue_name
 
     async def run(self, name: str, input: str):
@@ -72,7 +89,6 @@ class AgentService:
         self.runtime.start()
         registered_agent = get_registered_agent(name)
         resolved_queue_name = queue_name or self.default_queue_name
-        DBOS.register_queue(resolved_queue_name, on_conflict="never_update")
         return await DBOS.enqueue_workflow_async(
             resolved_queue_name,
             registered_agent.workflow,
@@ -96,7 +112,7 @@ class WorkerService:
         on_conflict: str = "update_if_latest_version",
         keep_alive: bool = True,
     ) -> None:
-        self.runtime = runtime or Runtime()
+        self.runtime = runtime or _get_default_runtime()
         self.agent_modules = list(agent_modules)
         self.queue_name = queue_name
         self.worker_concurrency = worker_concurrency
@@ -199,13 +215,14 @@ def _dbos_config(
 
 def _start_dbos_runtime(
     *,
+    owner_id: int | None = None,
     name: str | None = None,
     db_url: str | None = None,
     conductor_key: str | None = None,
     listen_queues: list[str] | tuple[str, ...] | None = None,
     before_launch: Callable[[DBOSConfig], None] | None = None,
 ) -> None:
-    global _initialized
+    global _initialized, _runtime_owner_id
 
     config = _dbos_config(
         name=name,
@@ -221,12 +238,18 @@ def _start_dbos_runtime(
 
     with _init_lock:
         if _initialized:
+            if owner_id is not None and owner_id != _runtime_owner_id:
+                raise _single_runtime_error()
             if before_launch is not None or listen_queues is not None:
                 raise RuntimeError(
-                    "DBOS is already initialized; queue listeners must be configured "
+                    "Runtime is already started; queue listeners must be configured "
                     "before DBOS.launch()."
                 )
             return
+
+        if _runtime_owner_id is not None and owner_id is not None and owner_id != _runtime_owner_id:
+            raise _single_runtime_error()
+        _runtime_owner_id = owner_id
 
         DBOS(config=config)
         if listen_queues is not None:
