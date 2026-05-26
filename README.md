@@ -93,7 +93,7 @@ from sdk import init, workflow, step, sleep, agentic_runner, enqueue_agent
 
 | Function | What it does |
 |---|---|
-| `init(name, db_url, conductor_key)` | Configure and launch DBOS — call once in `__main__` |
+| `start_runtime(name, db_url, conductor_key)` | Configure and launch DBOS once for the current process |
 | `@workflow()` | Mark a function as a durable workflow |
 | `@step()` | Mark a function as a checkpointed step |
 | `sleep(seconds)` | Durable sleep — skips elapsed time on crash recovery |
@@ -108,7 +108,7 @@ import the modules that define `@register_agent` workflows during startup.
 Use `start_agent(...)` when the API process should start work immediately. Use
 `enqueue_agent(...)` when the API should return quickly and let a worker process
 drain queued work. In a split deployment, initialize the API process with
-`ensure_initialized(listen_queues=[])` so it can enqueue work without draining
+`start_runtime(listen_queues=[])` so it can enqueue work without draining
 user queues.
 
 API-side enqueue:
@@ -226,7 +226,7 @@ def my_workflow():
     return result
 
 if __name__ == "__main__":
-    init(name="my-test")
+    start_runtime(name="my-test")
     my_workflow()
 ```
 
@@ -243,5 +243,5 @@ uv run python tests/event_booking.py
 Or pass it directly:
 
 ```python
-init(name="my-app", db_url="postgresql://...")
+start_runtime(name="my-app", db_url="postgresql://...")
 ```

@@ -20,7 +20,7 @@ _init_lock = threading.Lock()
 _initialized = False
 
 
-def _runtime_config(
+def _dbos_config(
     *,
     name: str | None = None,
     db_url: str | None = None,
@@ -48,7 +48,7 @@ def _runtime_config(
     return config
 
 
-def _launch_dbos(
+def _start_dbos_runtime(
     *,
     name: str | None = None,
     db_url: str | None = None,
@@ -58,11 +58,17 @@ def _launch_dbos(
 ) -> None:
     global _initialized
 
-    config = _runtime_config(
+    config = _dbos_config(
         name=name,
         db_url=db_url,
         conductor_key=conductor_key,
     )
+    resolved_db = config.get("system_database_url")
+    if not isinstance(resolved_db, str) or not resolved_db.strip():
+        raise RuntimeError(
+            "DBOS system database URL is required. Set DB_URL or "
+            "DBOS_SYSTEM_DATABASE_URL."
+        )
 
     with _init_lock:
         if _initialized:
@@ -81,35 +87,19 @@ def _launch_dbos(
         DBOS.launch()
         _initialized = True
 
-        resolved_db = config.get("system_database_url")
         if isinstance(resolved_db, str) and resolved_db.startswith("postgresql"):
             from .tracing import register_checkpoint_tracing_processor
 
             register_checkpoint_tracing_processor(resolved_db)
 
 
-def init(
+def start_runtime(
     name: str | None = None,
     db_url: str | None = None,
     conductor_key: str | None = None,
     listen_queues: list[str] | tuple[str, ...] | None = None,
 ) -> None:
-    _launch_dbos(
-        name=name,
-        db_url=db_url,
-        conductor_key=conductor_key,
-        listen_queues=listen_queues,
-    )
-
-
-def ensure_initialized(
-    *,
-    name: str | None = None,
-    db_url: str | None = None,
-    conductor_key: str | None = None,
-    listen_queues: list[str] | tuple[str, ...] | None = None,
-) -> None:
-    init(
+    _start_dbos_runtime(
         name=name,
         db_url=db_url,
         conductor_key=conductor_key,
@@ -118,7 +108,7 @@ def ensure_initialized(
 
 
 async def start_agent(name: str, input: str):
-    ensure_initialized()
+    start_runtime()
     registered_agent = get_registered_agent(name)
     return await DBOS.start_workflow_async(registered_agent.workflow, input)
 
@@ -134,7 +124,7 @@ def register_agent_queue(
     polling_interval_sec: float = 1.0,
     on_conflict: str = "update_if_latest_version",
 ):
-    ensure_initialized()
+    start_runtime()
     return DBOS.register_queue(
         queue_name,
         worker_concurrency=worker_concurrency,
@@ -159,7 +149,7 @@ async def enqueue_agent(
     *,
     queue_name: str = DEFAULT_AGENT_QUEUE,
 ):
-    ensure_initialized()
+    start_runtime()
     registered_agent = get_registered_agent(name)
     register_agent_queue(queue_name, on_conflict="never_update")
     return await DBOS.enqueue_workflow_async(
@@ -211,7 +201,7 @@ def run_agent_worker(
             [agent.name for agent in list_registered_agents()],
         )
 
-    _launch_dbos(
+    _start_dbos_runtime(
         name=name,
         db_url=db_url,
         conductor_key=conductor_key,

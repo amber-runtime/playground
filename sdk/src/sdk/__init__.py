@@ -26,11 +26,10 @@ from .decorators import (
 from .runtime import (
     DEFAULT_AGENT_QUEUE,
     enqueue_agent,
-    ensure_initialized,
-    init,
     listen_agent_queues,
     register_agent_queue,
     run_agent_worker,
+    start_runtime,
     start_agent,
 )
 
@@ -42,8 +41,7 @@ __all__ = [
     "workflow",
     "step",
     "sleep",
-    "init",
-    "ensure_initialized",
+    "start_runtime",
     "start_agent",
     "enqueue_agent",
     "listen_agent_queues",

@@ -24,9 +24,9 @@ from .user_agents import (
 )
 from sdk import (
     enqueue_agent,
-    ensure_initialized,
     get_workflow,
     list_registered_agents,
+    start_runtime,
     start_agent,
 )
 
@@ -53,7 +53,7 @@ class RunRequest(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    ensure_initialized(listen_queues=[])
+    start_runtime(listen_queues=[])
     yield
 
 
