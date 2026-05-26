@@ -10,7 +10,7 @@ from typing import Any
 from agents import Agent, function_tool
 from dbos import DBOS
 
-from sdk import register_agent, agentic_runner, logger, step
+from sdk import register_agent, agent_runner, logger, step
 
 QUOTE_CLOCK = datetime(2026, 6, 1, 14, 0, tzinfo=timezone.utc)
 REQUIRED_SPECIALISTS = ("flight", "hotel", "local", "budget")
@@ -491,7 +491,7 @@ def _estimate_budget_inputs(trip: dict[str, Any]) -> dict[str, int]:
 
 
 async def _plan_next_action(trip: dict[str, Any], completed: set[str], findings: dict[str, str]) -> str:
-    result = await agentic_runner(
+    result = await agent_runner(
         starting_agent=travel_planner,
         input=(
             "Choose the next specialist for this travel workflow.\n\n"
@@ -521,7 +521,7 @@ async def travel_concierge(request: str) -> str:
             break
 
         logger.info("travel-concierge selected specialist: %s", next_action)
-        specialist_result = await agentic_runner(
+        specialist_result = await agent_runner(
             starting_agent=SPECIALIST_AGENTS[next_action],
             input=_specialist_prompt(next_action, trip, findings),
         )
@@ -534,14 +534,14 @@ async def travel_concierge(request: str) -> str:
     missing = [name for name in REQUIRED_SPECIALISTS if name not in completed]
     for action in missing:
         logger.info("travel-concierge guardrail selected missing specialist: %s", action)
-        specialist_result = await agentic_runner(
+        specialist_result = await agent_runner(
             starting_agent=SPECIALIST_AGENTS[action],
             input=_specialist_prompt(action, trip, findings),
         )
         findings[action] = str(specialist_result.final_output)
         completed.add(action)
 
-    result = await agentic_runner(
+    result = await agent_runner(
         starting_agent=travel_coordinator,
         input=(
             "Create the final travel concierge recommendation from this completed "

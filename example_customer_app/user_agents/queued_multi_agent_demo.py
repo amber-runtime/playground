@@ -4,7 +4,7 @@ from typing import Any
 
 from agents import Agent, function_tool, handoff
 
-from sdk import register_agent, agentic_runner, logger, step
+from sdk import register_agent, agent_runner, logger, step
 
 SAMPLE_MESSAGE = (
     "Prepare a deep research memo on whether midsize logistics operators should adopt "
@@ -135,7 +135,7 @@ research_coordinator = Agent(
 
 @register_agent(name="research-handoff-agent")
 async def run_agent(message: str) -> str:
-    result = await agentic_runner(
+    result = await agent_runner(
         starting_agent=research_coordinator,
         input=message,
     )

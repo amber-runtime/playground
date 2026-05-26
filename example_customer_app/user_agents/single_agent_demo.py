@@ -1,7 +1,7 @@
 from agents import Agent, function_tool
 from ddgs import DDGS
 
-from sdk import register_agent, agentic_runner, sleep, step
+from sdk import register_agent, agent_runner, sleep, step
 
 
 @function_tool
@@ -41,7 +41,7 @@ Be explicit about what you found and what remains uncertain.""",
 @register_agent(name="research-assistant")
 async def research(topic: str) -> str:
     await sleep(30)
-    result = await agentic_runner(
+    result = await agent_runner(
         starting_agent=research_agent,
         input=f"Research this topic thoroughly: {topic}",
     )

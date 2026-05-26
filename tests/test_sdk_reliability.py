@@ -26,7 +26,7 @@ def load_module(name: str, relative_path: str):
     return module
 
 
-queries = load_module("queries_under_test", "sdk/src/sdk/queries.py")
+queries = load_module("queries_under_test", "sdk/src/sdk/dashboard/queries.py")
 
 
 class QueryTests(unittest.IsolatedAsyncioTestCase):
@@ -481,6 +481,11 @@ class AgentRegistryTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.DBOS = install_decorator_stubs()
         self.decorators = load_module("decorators_registry_under_test", "sdk/src/sdk/decorators.py")
+        sdk_src = ROOT / "sdk" / "src"
+        if str(sdk_src) not in sys.path:
+            sys.path.insert(0, str(sdk_src))
+        sys.modules.pop("sdk.runtime", None)
+        self.runtime = importlib.import_module("sdk.runtime")
 
     def test_agent_decorator_registers_named_workflow(self):
         async def run_topic(topic: str) -> str:
@@ -514,7 +519,7 @@ class AgentRegistryTests(unittest.IsolatedAsyncioTestCase):
             ["alpha", "zeta"],
         )
 
-    def test_init_is_idempotent_and_reads_embedded_env(self):
+    def test_runtime_start_is_idempotent_and_reads_embedded_env(self):
         with mock.patch.dict(
             os.environ,
             {
@@ -525,8 +530,9 @@ class AgentRegistryTests(unittest.IsolatedAsyncioTestCase):
             },
             clear=False,
         ):
-            self.decorators.init()
-            self.decorators.init()
+            runtime = self.runtime.Runtime()
+            runtime.start()
+            runtime.start()
 
         self.assertEqual(len(self.DBOS.init_calls), 1)
         self.DBOS.launch.assert_called_once()
@@ -537,8 +543,9 @@ class AgentRegistryTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(self.DBOS.init_calls[0]["conductor_key"], "key-1")
 
-    def test_ensure_initialized_can_disable_queue_listening_before_launch(self):
-        self.decorators.ensure_initialized(listen_queues=[])
+    def test_runtime_start_can_disable_queue_listening_before_launch(self):
+        runtime = self.runtime.Runtime()
+        runtime.start(listen_queues=[])
 
         self.assertEqual(self.DBOS.listened_queues, [[]])
         self.assertEqual(
@@ -547,23 +554,25 @@ class AgentRegistryTests(unittest.IsolatedAsyncioTestCase):
         )
         self.DBOS.launch.assert_called_once()
 
-    def test_ensure_initialized_rejects_listener_changes_after_launch(self):
-        self.decorators.ensure_initialized()
+    def test_runtime_start_rejects_listener_changes_after_launch(self):
+        runtime = self.runtime.Runtime()
+        runtime.start()
 
         with self.assertRaisesRegex(RuntimeError, "before DBOS.launch"):
-            self.decorators.ensure_initialized(listen_queues=[])
+            runtime.start(listen_queues=[])
 
         self.assertEqual(len(self.DBOS.init_calls), 1)
         self.DBOS.launch.assert_called_once()
 
-    async def test_start_agent_initializes_once_and_starts_registered_workflow(self):
+    async def test_agent_service_run_initializes_once_and_starts_registered_workflow(self):
         async def run_topic(topic: str) -> str:
             return topic
 
         workflow_fn = self.decorators.register_agent(name="alpha")(run_topic)
+        agents = self.runtime.AgentService()
 
-        first = await self.decorators.start_agent("alpha", "hello")
-        second = await self.decorators.start_agent("alpha", "again")
+        first = await agents.run("alpha", "hello")
+        second = await agents.run("alpha", "again")
 
         self.assertEqual(first.workflow_id, "workflow-started")
         self.assertEqual(second.workflow_id, "workflow-started")
@@ -574,12 +583,16 @@ class AgentRegistryTests(unittest.IsolatedAsyncioTestCase):
             [(workflow_fn, "hello"), (workflow_fn, "again")],
         )
 
-    def test_register_agent_queue_initializes_and_registers_queue(self):
-        self.decorators.register_agent_queue(
-            "agent-runs",
+    def test_worker_service_register_queue_initializes_and_registers_queue(self):
+        worker = self.runtime.WorkerService(
+            agent_modules=["customer_agent_module"],
+            queue_name="agent-runs",
             worker_concurrency=2,
             concurrency=5,
+            keep_alive=False,
         )
+
+        worker.register_queue()
 
         self.assertEqual(len(self.DBOS.init_calls), 1)
         self.DBOS.launch.assert_called_once()
@@ -601,48 +614,35 @@ class AgentRegistryTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
-    async def test_enqueue_agent_registers_queue_and_enqueues_registered_workflow(self):
+    async def test_agent_service_enqueue_submits_registered_workflow_without_queue_registration(self):
         async def run_topic(topic: str) -> str:
             return topic
 
         workflow_fn = self.decorators.register_agent(name="alpha")(run_topic)
+        agents = self.runtime.AgentService()
 
-        handle = await self.decorators.enqueue_agent("alpha", "hello")
+        handle = await agents.enqueue("alpha", "hello")
 
         self.assertEqual(handle.workflow_id, "workflow-enqueued")
         self.assertEqual(len(self.DBOS.init_calls), 1)
-        self.assertEqual(
-            self.DBOS.registered_queues[0][0],
-            "agent-runs",
-        )
-        self.assertEqual(
-            self.DBOS.registered_queues[0][1]["on_conflict"],
-            "never_update",
-        )
+        self.assertEqual(self.DBOS.registered_queues, [])
         self.assertEqual(
             self.DBOS.enqueued_workflows,
             [("agent-runs", workflow_fn, "hello")],
         )
 
-    def test_listen_agent_queues_passes_queue_names_to_dbos(self):
-        self.decorators.listen_agent_queues(["agent-runs", "slow-agents"])
-
-        self.assertEqual(
-            self.DBOS.listened_queues,
-            [["agent-runs", "slow-agents"]],
-        )
-
-    def test_run_agent_worker_imports_modules_configures_queue_before_launch(self):
+    def test_worker_service_run_imports_modules_configures_queue_before_launch(self):
         sys.modules["customer_agent_module"] = types.ModuleType("customer_agent_module")
         self.decorators.register_agent(name="alpha")(lambda value: value)
-
-        self.decorators.run_agent_worker(
+        worker = self.runtime.WorkerService(
             agent_modules=["customer_agent_module"],
             queue_name="agent-runs",
             worker_concurrency=3,
             concurrency=9,
             keep_alive=False,
         )
+
+        worker.run()
 
         self.assertEqual(len(self.DBOS.init_calls), 1)
         self.DBOS.launch.assert_called_once()
@@ -669,14 +669,15 @@ class AgentRegistryTests(unittest.IsolatedAsyncioTestCase):
             ],
         )
 
-    def test_run_agent_worker_requires_registered_agents(self):
+    def test_worker_service_requires_registered_agents(self):
         sys.modules["empty_agent_module"] = types.ModuleType("empty_agent_module")
+        worker = self.runtime.WorkerService(
+            agent_modules=["empty_agent_module"],
+            keep_alive=False,
+        )
 
         with self.assertRaisesRegex(RuntimeError, "No agents are registered"):
-            self.decorators.run_agent_worker(
-                agent_modules=["empty_agent_module"],
-                keep_alive=False,
-            )
+            worker.run()
 
 
 class DemoRegistrationTests(unittest.TestCase):
@@ -689,7 +690,7 @@ class DemoRegistrationTests(unittest.TestCase):
         )
         sdk = types.ModuleType("sdk")
         sdk.register_agent = self.decorators.register_agent
-        sdk.agentic_runner = self.decorators.agentic_runner
+        sdk.agent_runner = self.decorators.agent_runner
         sdk.logger = self.decorators.logger
         sdk.sleep = self.decorators.sleep
         sdk.step = self.decorators.step

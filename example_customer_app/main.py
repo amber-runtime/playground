@@ -23,11 +23,10 @@ from .user_agents import (
     single_agent_demo,  # noqa: F401
 )
 from sdk import (
-    enqueue_agent,
-    ensure_initialized,
+    AgentService,
+    Runtime,
     get_workflow,
     list_registered_agents,
-    start_agent,
 )
 
 load_dotenv()
@@ -38,6 +37,8 @@ templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 # Demo-only: 0.0 disables random travel crashes; 1.0 arms every travel request.
 RANDOM_TRAVEL_CRASH_RATE = 0.25
 QUEUED_AGENT_NAMES = {"research-handoff-agent"}
+runtime = Runtime()
+agents = AgentService(runtime)
 
 
 class RunRequest(BaseModel):
@@ -53,7 +54,7 @@ class RunRequest(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    ensure_initialized(listen_queues=[])
+    runtime.start(listen_queues=[])
     yield
 
 
@@ -238,7 +239,7 @@ async def create_run(
         run_input = multi_agent_demo.request_hotel_crash_demo(run_input)
 
     if request.agent in QUEUED_AGENT_NAMES:
-        handle = await enqueue_agent(request.agent, run_input)
+        handle = await agents.enqueue(request.agent, run_input)
     else:
-        handle = await start_agent(request.agent, run_input)
+        handle = await agents.run(request.agent, run_input)
     return RunResponse(workflow_id=handle.workflow_id, agent=request.agent)

@@ -27,7 +27,9 @@ playground/
 ├── sdk/          # the SDK library (edit this to develop)
 │   └── src/sdk/
 │       ├── __init__.py
-│       └── decorators.py   # workflow, step, sleep, init
+│       ├── decorators.py   # workflow, step, sleep, register_agent
+│       ├── runtime.py      # Runtime, AgentService, WorkerService
+│       └── dashboard/      # dashboard backend helpers
 ├── tests/        # test scripts that use the SDK
 └── deprecated/   # prior reference implementations (Inngest, raw DBOS)
 ```
@@ -88,44 +90,53 @@ The SDK lives in `sdk/src/sdk/`. Since it's installed as an editable package, yo
 **Current public API:**
 
 ```python
-from sdk import init, workflow, step, sleep, agentic_runner, enqueue_agent
+from sdk import Runtime, AgentService, WorkerService, workflow, step, sleep, agent_runner
 ```
 
 | Function | What it does |
 |---|---|
-| `init(name, db_url, conductor_key)` | Configure and launch DBOS — call once in `__main__` |
 | `@workflow()` | Mark a function as a durable workflow |
 | `@step()` | Mark a function as a checkpointed step |
 | `sleep(seconds)` | Durable sleep — skips elapsed time on crash recovery |
-| `agentic_runner(agent, prompt)` | Run an OpenAI Agents SDK agent through DBOS |
-| `enqueue_agent(agent_name, input)` | Add a registered agent workflow to the default DBOS queue |
+| `agent_runner(agent, prompt)` | Run an OpenAI Agents SDK agent through DBOS |
+| `Runtime.start()` | Configure and launch DBOS once for the current process |
+| `AgentService.run(agent_name, input)` | Start a registered orchestration workflow immediately |
+| `AgentService.enqueue(agent_name, input)` | Submit a registered orchestration workflow to the default DBOS queue |
+| `WorkerService.run()` | Launch a queue worker for registered orchestration workflows |
 
 Agent workflows are registered when their modules are imported. In an app,
 import the modules that define `@register_agent` workflows during startup.
 
 ## Queueing Agents
 
-Use `start_agent(...)` when the API process should start work immediately. Use
-`enqueue_agent(...)` when the API should return quickly and let a worker process
-drain queued work. In a split deployment, initialize the API process with
-`ensure_initialized(listen_queues=[])` so it can enqueue work without draining
-user queues.
+Use `AgentService.run(...)` when the API process should start work immediately.
+Use `AgentService.enqueue(...)` when the API should return quickly and let a
+worker process drain queued work. In a split deployment, initialize the API
+runtime with `listen_queues=[]` so it can enqueue work without draining user
+queues. Queue configuration is owned by the worker runtime; enqueue submission
+does not require an active worker, but queued work will not execute until a
+worker runtime is running and listening on the queue.
 
 API-side enqueue:
 
 ```python
-from sdk import enqueue_agent
+from sdk import AgentService, Runtime
 
-handle = await enqueue_agent("research-handoff-agent", user_input)
+runtime = Runtime()
+runtime.start(listen_queues=[])
+agents = AgentService(runtime)
+
+handle = await agents.enqueue("research-handoff-agent", user_input)
 return {"workflow_id": handle.workflow_id}
 ```
 
 Worker-side template:
 
 ```python
-from sdk import run_agent_worker
+from sdk import Runtime, WorkerService
 
-run_agent_worker(
+worker = WorkerService(
+    runtime=Runtime(),
     agent_modules=[
         "my_app.agents.single_agent_demo",
         "my_app.agents.multi_agent_demo",
@@ -134,6 +145,7 @@ run_agent_worker(
     queue_name="agent-runs",
     worker_concurrency=1,
 )
+worker.run()
 ```
 
 In split deployments, the API and worker should import the same registered
@@ -213,7 +225,7 @@ worker logs, completed workflows, and backlog drain time.
 **Writing a new test:**
 
 ```python
-from sdk import workflow, step, init
+from sdk import Runtime, workflow, step
 
 @step()
 def call_external_api():
@@ -226,7 +238,8 @@ def my_workflow():
     return result
 
 if __name__ == "__main__":
-    init(name="my-test")
+    runtime = Runtime(name="my-test")
+    runtime.start()
     my_workflow()
 ```
 
@@ -243,5 +256,6 @@ uv run python tests/event_booking.py
 Or pass it directly:
 
 ```python
-init(name="my-app", db_url="postgresql://...")
+runtime = Runtime(name="my-app", db_url="postgresql://...")
+runtime.start()
 ```
