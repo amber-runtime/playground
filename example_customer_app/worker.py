@@ -7,13 +7,15 @@ Run:
 
 from dotenv import load_dotenv
 
-from sdk import run_agent_worker
+from sdk import Runtime, WorkerService
 
 load_dotenv()
 
 
 def main() -> None:
-    run_agent_worker(
+    runtime = Runtime()
+    worker = WorkerService(
+        runtime=runtime,
         agent_modules=[
             "example_customer_app.user_agents.single_agent_demo",
             "example_customer_app.user_agents.multi_agent_demo",
@@ -22,6 +24,7 @@ def main() -> None:
         queue_name="agent-runs",
         worker_concurrency=1,
     )
+    worker.run()
 
 
 if __name__ == "__main__":
