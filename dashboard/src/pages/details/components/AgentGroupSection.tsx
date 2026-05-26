@@ -10,6 +10,8 @@ interface Props {
   onStepClick: (stepId: number) => void
   isExpanded: boolean
   onExpandChange: (expanded: boolean) => void
+  workflowStart: number
+  workflowEnd: number
 }
 
 function PreflightBadge() {
@@ -39,6 +41,8 @@ export function AgentGroupSection({
   onStepClick,
   isExpanded,
   onExpandChange,
+  workflowStart,
+  workflowEnd,
 }: Props) {
   const prevContainedRef = useRef(false)
 
@@ -95,6 +99,8 @@ export function AgentGroupSection({
               step={step}
               isSelected={step.step_id === selectedStepId}
               onClick={onStepClick}
+              workflowStart={workflowStart}
+              workflowEnd={workflowEnd}
             />
           ))}
         </div>

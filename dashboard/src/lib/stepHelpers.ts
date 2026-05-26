@@ -160,15 +160,42 @@ export interface StepBarGeometry {
   inProgress: boolean
 }
 
+const TERMINAL_WORKFLOW_STATUSES: ReadonlySet<string> = new Set([
+  'SUCCESS',
+  'ERROR',
+  'CANCELLED',
+  'FAILURE',
+])
+
+function isFiniteNumber(n: unknown): n is number {
+  return typeof n === 'number' && Number.isFinite(n)
+}
+
+function stepDerivedEnd(steps: Step[], fallback: number): number {
+  if (steps.length === 0) return fallback
+  const last = steps[steps.length - 1]
+  return last.completed_at_epoch_ms ?? last.started_at_epoch_ms ?? fallback
+}
+
 export function computeWorkflowWindow(
   workflow: WorkflowInfo,
   steps: Step[],
 ): { start: number; end: number } {
-  const start = workflow.created_at
-  if (steps.length === 0) return { start, end: start + WORKFLOW_WINDOW_MIN_MS }
-  const last = steps[steps.length - 1]
-  const lastEnd = last.completed_at_epoch_ms ?? last.started_at_epoch_ms ?? start
-  return { start, end: Math.max(lastEnd, start + WORKFLOW_WINDOW_MIN_MS) }
+  const start = isFiniteNumber(workflow.created_at)
+    ? workflow.created_at
+    : steps[0]?.started_at_epoch_ms ?? Date.now()
+
+  const isTerminal = TERMINAL_WORKFLOW_STATUSES.has(workflow.status)
+  let end: number
+  if (isTerminal) {
+    end = isFiniteNumber(workflow.updated_at)
+      ? workflow.updated_at
+      : stepDerivedEnd(steps, start)
+  } else {
+    end = Date.now()
+  }
+
+  return { start, end: Math.max(end, start + WORKFLOW_WINDOW_MIN_MS) }
 }
 
 export function computeStepBarGeometry(
@@ -183,6 +210,41 @@ export function computeStepBarGeometry(
   const leftPct = ((stepStart - workflowStart) / totalDuration) * 100
   const widthPct = Math.max(((stepEnd - stepStart) / totalDuration) * 100, BAR_MIN_WIDTH_PCT)
   return { leftPct, widthPct, inProgress }
+}
+
+const RECOVERY_GAP_MIN_MS = 1000
+
+// Largest period during which no step was active. Uses a running max-end so
+// overlapping concurrent steps don't register as gaps. Returns null if no gap
+// meets the minimum threshold.
+export function findLargestRecoveryGap(
+  steps: Step[],
+): { start: number; end: number } | null {
+  const intervals = steps
+    .filter(
+      (s) =>
+        s.started_at_epoch_ms != null && s.completed_at_epoch_ms != null,
+    )
+    .map((s) => ({
+      start: s.started_at_epoch_ms as number,
+      end: s.completed_at_epoch_ms as number,
+    }))
+    .sort((a, b) => a.start - b.start)
+
+  if (intervals.length < 2) return null
+
+  let best: { start: number; end: number } | null = null
+  let runningMaxEnd = intervals[0].end
+  for (let i = 1; i < intervals.length; i++) {
+    const gapMs = intervals[i].start - runningMaxEnd
+    if (gapMs >= RECOVERY_GAP_MIN_MS) {
+      if (best == null || gapMs > best.end - best.start) {
+        best = { start: runningMaxEnd, end: intervals[i].start }
+      }
+    }
+    if (intervals[i].end > runningMaxEnd) runningMaxEnd = intervals[i].end
+  }
+  return best
 }
 
 // USD per million tokens. Prices accurate as of late 2025 — update when the
