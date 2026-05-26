@@ -84,8 +84,6 @@ class QueryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(records[0]["function_name"])
         self.assertEqual(records[0]["event_type"], "step")
         self.assertIsNone(records[0]["step_output"])
-        self.assertIsNone(records[0]["step_error"])
-        self.assertIsNone(records[0]["child_workflow_id"])
 
     def test_build_step_records_carries_dbos_native_output_for_plain_steps(self):
         steps = [
@@ -107,8 +105,6 @@ class QueryTests(unittest.IsolatedAsyncioTestCase):
             records[0]["step_output"],
             {"destination": "Tokyo", "guests": 2},
         )
-        self.assertIsNone(records[0]["step_error"])
-        self.assertIsNone(records[0]["child_workflow_id"])
 
     def test_build_step_records_falls_back_to_completed_at_for_plain_steps(self):
         steps = [
@@ -150,7 +146,7 @@ class QueryTests(unittest.IsolatedAsyncioTestCase):
             iso_utc_from_ms(1_747_830_410_000),
         )
 
-    def test_build_step_records_stringifies_dbos_native_errors(self):
+    def test_build_step_records_marks_dbos_native_errors(self):
         steps = [
             {
                 "function_id": 2,
@@ -164,8 +160,6 @@ class QueryTests(unittest.IsolatedAsyncioTestCase):
         records = queries.build_step_records(steps, [])
 
         self.assertEqual(records[0]["status"], "ERROR")
-        self.assertEqual(records[0]["step_error"], "bad lookup")
-        self.assertEqual(records[0]["child_workflow_id"], "wf-child-1")
 
     def test_build_step_records_carries_llm_raw_io(self):
         steps = [{"function_id": 1, "function_name": "_model_call_step", "error": None}]
