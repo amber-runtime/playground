@@ -103,7 +103,28 @@ export function parseSearchWebOutput(
     .filter((r) => r.title || r.url)
 }
 
+export function stepStartedAtMs(step: Step): number | null {
+  if (step.display_started_at_epoch_ms !== undefined) return step.display_started_at_epoch_ms
+  return step.started_at_epoch_ms
+}
+
+export function stepCompletedAtMs(step: Step): number | null {
+  if (step.display_completed_at_epoch_ms !== undefined) return step.display_completed_at_epoch_ms
+  return step.completed_at_epoch_ms
+}
+
 export function stepDurationMs(step: Step): number | null {
+  if (step.display_duration_ms !== undefined && step.display_duration_ms != null)
+    return step.display_duration_ms
+
+  const startedAt = stepStartedAtMs(step)
+  const completedAt = stepCompletedAtMs(step)
+  if (startedAt != null && completedAt != null) {
+    return Math.max(completedAt - startedAt, 0)
+  }
+  if (startedAt != null) {
+    return Math.max(Date.now() - startedAt, 0)
+  }
   return step.duration_ms
 }
 
@@ -118,8 +139,8 @@ export function groupStepsByAgent(steps: Step[]): AgentGroup[] {
 
   const flush = () => {
     if (currentSteps.length === 0) return
-    const startedAtMs = currentSteps[0].started_at_epoch_ms ?? null
-    const endedAtMs = currentSteps[currentSteps.length - 1].completed_at_epoch_ms ?? null
+    const startedAtMs = stepStartedAtMs(currentSteps[0])
+    const endedAtMs = stepCompletedAtMs(currentSteps[currentSteps.length - 1])
     groups.push({
       agentName: currentAgentName,
       steps: currentSteps,
@@ -174,7 +195,7 @@ function isFiniteNumber(n: unknown): n is number {
 function stepDerivedEnd(steps: Step[], fallback: number): number {
   if (steps.length === 0) return fallback
   const last = steps[steps.length - 1]
-  return last.completed_at_epoch_ms ?? last.started_at_epoch_ms ?? fallback
+  return stepCompletedAtMs(last) ?? stepStartedAtMs(last) ?? fallback
 }
 
 export function computeWorkflowWindow(
@@ -183,7 +204,7 @@ export function computeWorkflowWindow(
 ): { start: number; end: number } {
   const start = isFiniteNumber(workflow.created_at)
     ? workflow.created_at
-    : steps[0]?.started_at_epoch_ms ?? Date.now()
+    : (steps[0] != null ? stepStartedAtMs(steps[0]) : null) ?? Date.now()
 
   const isTerminal = TERMINAL_WORKFLOW_STATUSES.has(workflow.status)
   let end: number
@@ -204,9 +225,9 @@ export function computeStepBarGeometry(
   workflowEnd: number,
 ): StepBarGeometry {
   const totalDuration = Math.max(workflowEnd - workflowStart, 1)
-  const stepStart = step.started_at_epoch_ms ?? workflowStart
-  const inProgress = step.completed_at_epoch_ms == null
-  const stepEnd = step.completed_at_epoch_ms ?? workflowEnd
+  const stepStart = stepStartedAtMs(step) ?? workflowStart
+  const inProgress = stepCompletedAtMs(step) == null
+  const stepEnd = stepCompletedAtMs(step) ?? workflowEnd
   const leftPct = ((stepStart - workflowStart) / totalDuration) * 100
   const widthPct = Math.max(((stepEnd - stepStart) / totalDuration) * 100, BAR_MIN_WIDTH_PCT)
   return { leftPct, widthPct, inProgress }
@@ -223,11 +244,11 @@ export function findLargestRecoveryGap(
   const intervals = steps
     .filter(
       (s) =>
-        s.started_at_epoch_ms != null && s.completed_at_epoch_ms != null,
+        stepStartedAtMs(s) != null && stepCompletedAtMs(s) != null,
     )
     .map((s) => ({
-      start: s.started_at_epoch_ms as number,
-      end: s.completed_at_epoch_ms as number,
+      start: stepStartedAtMs(s) as number,
+      end: stepCompletedAtMs(s) as number,
     }))
     .sort((a, b) => a.start - b.start)
 

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import {
   Brain,
   Clock,
@@ -12,6 +13,9 @@ import {
   formatTimestamp,
   getStepKind,
   humanizeStepName,
+  stepCompletedAtMs,
+  stepDurationMs,
+  stepStartedAtMs,
 } from '../../../../lib/stepHelpers'
 import { Section } from './Section'
 import { JsonBlock } from './JsonBlock'
@@ -42,7 +46,7 @@ function StatusBadge({ step }: { step: Step }) {
         Error
       </span>
     )
-  if (step.completed_at_epoch_ms == null)
+  if (stepCompletedAtMs(step) == null)
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/30">
         Running
@@ -65,19 +69,31 @@ function SectionLabel({ children }: { children: string }) {
 }
 
 export function StepDetailPanel({ step }: Props) {
+  const [now, setNow] = useState(Date.now())
   const kind = getStepKind(step)
   const humanName = step.event_type === 'tool_call'
     ? humanizeStepName(step.tool_name ?? step.function_name)
     : humanizeStepName(step.function_name)
 
-  const startedAt = step.started_at_epoch_ms
-  const completedAt = step.completed_at_epoch_ms
-  const dur = step.duration_ms
+  const startedAt = stepStartedAtMs(step)
+  const completedAt = stepCompletedAtMs(step)
+  const dur = stepDurationMs(step)
+  const isRunningSleep = kind === 'sleep' && completedAt == null && startedAt != null
+  const displayDurationMs = isRunningSleep
+    ? Math.max(now - startedAt, 0)
+    : dur
+
+  useEffect(() => {
+    if (!isRunningSleep) return
+    setNow(Date.now())
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(timer)
+  }, [isRunningSleep])
 
   const timingRows: Array<[string, string]> = [
     ['Started', startedAt != null ? formatTimestamp(startedAt) : '—'],
     ['Completed', completedAt != null ? formatTimestamp(completedAt) : 'Still running'],
-    ['Duration', dur != null ? formatDuration(dur) : '—'],
+    ['Duration', displayDurationMs != null ? formatDuration(displayDurationMs) : '—'],
   ]
 
   const hasError = step.status === 'ERROR'
@@ -191,7 +207,9 @@ export function StepDetailPanel({ step }: Props) {
         <Section title="Sleep" defaultExpanded>
           <div className="flex items-baseline gap-2">
             <span className="text-3xl font-semibold text-slate-100 tabular-nums">
-              {dur != null ? (dur / 1000).toFixed(dur < 10000 ? 1 : 0) : '—'}
+              {displayDurationMs != null
+                ? (displayDurationMs / 1000).toFixed(displayDurationMs < 10000 ? 1 : 0)
+                : '—'}
             </span>
             <span className="text-sm text-slate-400">seconds</span>
           </div>

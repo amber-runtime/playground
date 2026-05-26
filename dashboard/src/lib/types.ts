@@ -8,6 +8,9 @@ export interface Step {
   duration_ms: number | null
   started_at_epoch_ms: number | null
   completed_at_epoch_ms: number | null
+  display_started_at_epoch_ms: number | null
+  display_completed_at_epoch_ms: number | null
+  display_duration_ms: number | null
   step_output: unknown | null
   agent_name: string | null
   llm_model: string | null
