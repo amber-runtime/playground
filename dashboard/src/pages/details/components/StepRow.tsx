@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import type { Step } from '../../../lib/types'
 import {
+  computeStepBarGeometry,
   formatDuration,
   getStepKind,
   humanizeStepName,
@@ -18,6 +19,8 @@ interface Props {
   step: Step
   isSelected: boolean
   onClick: (stepId: number) => void
+  workflowStart: number
+  workflowEnd: number
 }
 
 function StepIcon({ step }: { step: Step }) {
@@ -44,7 +47,44 @@ function StatusDot({ step }: { step: Step }) {
   return <CheckCircle2 size={13} className="text-emerald-400 shrink-0" />
 }
 
-export function StepRow({ step, isSelected, onClick }: Props) {
+function barColorClass(step: Step): string {
+  if (step.status === 'ERROR') return 'bg-red-500/80'
+  if (step.completed_at_epoch_ms == null) return 'bg-amber-500/70'
+  return 'bg-emerald-500/70'
+}
+
+function StepBar({
+  step,
+  workflowStart,
+  workflowEnd,
+}: {
+  step: Step
+  workflowStart: number
+  workflowEnd: number
+}) {
+  const hasTiming = step.started_at_epoch_ms != null
+  const geom = hasTiming
+    ? computeStepBarGeometry(step, workflowStart, workflowEnd)
+    : null
+  return (
+    <div className="relative h-3 rounded-sm bg-slate-800/60 overflow-hidden">
+      {geom != null && (
+        <span
+          className={`absolute top-0 h-full min-w-[2px] rounded-sm ${barColorClass(step)}`}
+          style={{ left: `${geom.leftPct}%`, width: `${geom.widthPct}%` }}
+        />
+      )}
+    </div>
+  )
+}
+
+export function StepRow({
+  step,
+  isSelected,
+  onClick,
+  workflowStart,
+  workflowEnd,
+}: Props) {
   const stepId = step.step_id
   const kind = getStepKind(step)
   const hasError = step.status === 'ERROR'
@@ -73,7 +113,7 @@ export function StepRow({ step, isSelected, onClick }: Props) {
       onClick={() => stepId != null && onClick(stepId)}
       disabled={stepId == null}
       title={tooltip}
-      className={`group w-full grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 h-8 px-3 text-left border-l-2 transition-colors ${rowBg}`}
+      className={`group w-full grid grid-cols-[minmax(180px,1fr)_minmax(0,3fr)_4rem] items-center gap-3 h-8 px-3 text-left border-l-2 transition-colors ${rowBg}`}
     >
       {/* Left: status, kind icon, name */}
       <div className="flex items-center gap-2 min-w-0">
@@ -81,6 +121,13 @@ export function StepRow({ step, isSelected, onClick }: Props) {
         <StepIcon step={step} />
         <span className={`text-xs truncate ${nameClass}`}>{name}</span>
       </div>
+
+      {/* Middle: timeline bar */}
+      <StepBar
+        step={step}
+        workflowStart={workflowStart}
+        workflowEnd={workflowEnd}
+      />
 
       {/* Right: duration */}
       <span className="text-[11px] font-mono text-slate-500 tabular-nums text-right shrink-0">

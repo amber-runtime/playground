@@ -130,6 +130,7 @@ export function WorkflowDetailPage() {
                   </div>
                 ) : (
                   <StepList
+                    workflow={data.workflow}
                     steps={data.steps}
                     selectedStepId={selectedStepId}
                     onStepClick={handleStepClick}

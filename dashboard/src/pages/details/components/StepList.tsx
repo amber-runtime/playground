@@ -1,10 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { Step, SelectedStepId, AgentGroup } from '../../../lib/types'
-import { filterStepsBySearch, groupStepsByAgent } from '../../../lib/stepHelpers'
+import type { Step, SelectedStepId, AgentGroup, WorkflowInfo } from '../../../lib/types'
+import {
+  computeWorkflowWindow,
+  filterStepsBySearch,
+  groupStepsByAgent,
+} from '../../../lib/stepHelpers'
 import { AgentGroupSection } from './AgentGroupSection'
+import { RecoveryGapBand } from './RecoveryGapBand'
 import { StepListToolbar } from './StepListToolbar'
+import { TimeAxis } from './TimeAxis'
 
 interface Props {
+  workflow: WorkflowInfo
   steps: Step[]
   selectedStepId: SelectedStepId
   onStepClick: (id: number) => void
@@ -16,8 +23,12 @@ function groupKey(group: AgentGroup): string {
   return group.agentName ?? PREFLIGHT_KEY
 }
 
-export function StepList({ steps, selectedStepId, onStepClick }: Props) {
+export function StepList({ workflow, steps, selectedStepId, onStepClick }: Props) {
   const groups = useMemo(() => groupStepsByAgent(steps), [steps])
+  const window = useMemo(
+    () => computeWorkflowWindow(workflow, steps),
+    [workflow, steps],
+  )
   const [searchQuery, setSearchQuery] = useState('')
   const [expansion, setExpansion] = useState<Map<string, boolean>>(() => {
     const m = new Map<string, boolean>()
@@ -107,6 +118,8 @@ export function StepList({ steps, selectedStepId, onStepClick }: Props) {
         onCollapseAll={handleCollapseAll}
       />
 
+      {steps.length > 1 && <TimeAxis start={window.start} end={window.end} />}
+
       {renderedGroups.length === 0 ? (
         <div className="bg-slate-900 border border-slate-800 rounded-lg px-5 py-8 text-center">
           <p className="text-sm text-slate-500">
@@ -114,7 +127,13 @@ export function StepList({ steps, selectedStepId, onStepClick }: Props) {
           </p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="relative space-y-2">
+          <RecoveryGapBand
+            workflow={workflow}
+            steps={steps}
+            windowStart={window.start}
+            windowEnd={window.end}
+          />
           {renderedGroups.map((group, i) => {
             const key = groupKey(group)
             // During search, force expansion so matches are visible without
@@ -128,6 +147,8 @@ export function StepList({ steps, selectedStepId, onStepClick }: Props) {
                 onStepClick={onStepClick}
                 isExpanded={effectiveExpanded}
                 onExpandChange={(exp) => handleGroupExpandChange(key, exp)}
+                workflowStart={window.start}
+                workflowEnd={window.end}
               />
             )
           })}
