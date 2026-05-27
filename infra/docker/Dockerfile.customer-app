@@ -32,7 +32,6 @@ RUN uv sync --frozen --no-dev
 COPY sdk/                  sdk/
 COPY admin_control_plane/  admin_control_plane/
 COPY example_customer_app/ example_customer_app/
-COPY user_agents/          user_agents/
 
 # Prefix-stripping middleware for path-based ALB routing
 COPY infra/docker/strip_prefix.py strip_prefix.py
