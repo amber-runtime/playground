@@ -919,6 +919,50 @@ class DemoRegistrationTests(unittest.TestCase):
             "budget",
         )
 
+    def test_queued_research_guardrail_blocks_final_until_all_phases_complete(self):
+        demo = load_module(
+            "queued_multi_agent_demo_guardrail_under_test",
+            "example_customer_app/user_agents/queued_multi_agent_demo.py",
+        )
+
+        self.assertEqual(
+            demo.choose_guarded_research_action("final", {"public_sources"}),
+            "counterarguments",
+        )
+        self.assertEqual(
+            demo.choose_guarded_research_action(
+                "final",
+                {"public_sources", "counterarguments", "evidence_brief"},
+            ),
+            "final",
+        )
+        self.assertEqual(
+            demo.choose_guarded_research_action("public_sources", {"public_sources"}),
+            "counterarguments",
+        )
+        self.assertEqual(
+            demo.choose_guarded_research_action(
+                "evidence_brief",
+                {"public_sources"},
+            ),
+            "counterarguments",
+        )
+
+    def test_queued_research_action_can_be_extracted_from_json_or_prose(self):
+        demo = load_module(
+            "queued_multi_agent_demo_planner_parse_under_test",
+            "example_customer_app/user_agents/queued_multi_agent_demo.py",
+        )
+
+        self.assertEqual(
+            demo.extract_research_action('{"next_action": "public_sources"}'),
+            "public_sources",
+        )
+        self.assertEqual(
+            demo.extract_research_action("I recommend the evidence brief next."),
+            "evidence brief",
+        )
+
     def test_hotel_quotes_do_not_crash_without_request_marker(self):
         demo = load_module(
             "multi_agent_demo_no_crash_under_test",
