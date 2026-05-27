@@ -7,7 +7,6 @@ Run:
 
 from contextlib import asynccontextmanager
 from pathlib import Path
-import random
 
 from dotenv import load_dotenv
 from fastapi import Body, FastAPI, HTTPException, Query, Request
@@ -34,8 +33,6 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
-# Demo-only: 0.0 disables random travel crashes; 1.0 arms every travel request.
-RANDOM_TRAVEL_CRASH_RATE = 0.25
 QUEUED_AGENT_NAMES = {"research-handoff-agent"}
 runtime = Runtime()
 agents = AgentService(runtime)
@@ -128,7 +125,7 @@ def _agent_capability(name: str) -> RegisteredAgentResponse:
 def _should_arm_travel_crash(agent: str, *, crash_during_hotel: bool) -> bool:
     if agent != "travel-concierge":
         return False
-    return crash_during_hotel or random.random() < RANDOM_TRAVEL_CRASH_RATE
+    return crash_during_hotel
 
 
 app = FastAPI(

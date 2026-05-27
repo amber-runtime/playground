@@ -1,3 +1,4 @@
+import ast
 import importlib.util
 import os
 import sys
@@ -818,6 +819,41 @@ class DemoRegistrationTests(unittest.TestCase):
 
         kill.assert_not_called()
         self.assertIn("Market House Hotel", quotes)
+
+    def test_travel_crash_is_only_armed_by_explicit_toggle(self):
+        source_path = ROOT / "example_customer_app" / "main.py"
+        source = source_path.read_text(encoding="utf-8")
+        module = ast.parse(source)
+        helper = next(
+            node
+            for node in module.body
+            if isinstance(node, ast.FunctionDef)
+            and node.name == "_should_arm_travel_crash"
+        )
+        namespace: dict[str, object] = {}
+        exec(compile(ast.Module([helper], []), str(source_path), "exec"), namespace)
+        should_arm_travel_crash = namespace["_should_arm_travel_crash"]
+
+        self.assertFalse(
+            should_arm_travel_crash(
+                "travel-concierge",
+                crash_during_hotel=False,
+            )
+        )
+        self.assertTrue(
+            should_arm_travel_crash(
+                "travel-concierge",
+                crash_during_hotel=True,
+            )
+        )
+        self.assertFalse(
+            should_arm_travel_crash(
+                "research-assistant",
+                crash_during_hotel=True,
+            )
+        )
+        self.assertNotIn("RANDOM_TRAVEL_CRASH_RATE", source)
+        self.assertNotIn("random.random", source)
 
     def test_hotel_crash_marker_prevents_repeated_crashes(self):
         demo = load_module("multi_agent_demo_crash_marker_under_test", "user_agents/multi_agent_demo.py")
