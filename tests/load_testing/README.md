@@ -18,20 +18,29 @@ Use one dedicated DBOS database for every load-test process. The load-test API,
 worker, and reporter read `.env.load-test` so the normal customer app database
 in `.env` is not used by accident.
 
+### Option 1: Using .env.load-test (Recommended)
+
 ```bash
-cp env.load-test.example .env.load-test
+cd tests/load_testing
+cp .env.load-test.example .env.load-test
 ```
 
-Set `LOAD_TEST_DB_URL` in `.env.load-test` to a database that is safe to fill
-with synthetic workflow history:
+Edit `tests/load_testing/.env.load-test` and set `LOAD_TEST_DB_URL` to a database
+that is safe to fill with synthetic workflow history:
 
 ```bash
 LOAD_TEST_DB_URL='postgresql://postgres:password@localhost:5432/dbos_load_test'
+LOAD_TEST_RUNTIME_NAME=amber-load-test
 ```
 
-You can still override this for one command with an exported environment
-variable, but the load-test entrypoints intentionally do not fall back to
-`DB_URL` or `DBOS_SYSTEM_DATABASE_URL`.
+### Option 2: Using Environment Variables
+
+Alternatively, export environment variables for a single command:
+
+```bash
+export LOAD_TEST_DB_URL='postgresql://postgres:password@localhost:5432/dbos_load_test'
+export LOAD_TEST_RUNTIME_NAME=amber-load-test
+```
 
 Install k6 if it is not already available:
 

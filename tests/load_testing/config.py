@@ -6,8 +6,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 
-DEFAULT_LOAD_TEST_RUNTIME_NAME = "checkpoint-load-test"
-ENV_FILE = Path(__file__).resolve().parents[2] / ".env.load-test"
+DEFAULT_LOAD_TEST_RUNTIME_NAME = "amber-load-test"
+ENV_FILE = Path(__file__).resolve().parent / ".env.load-test"
 
 
 class LoadTestConfig:
