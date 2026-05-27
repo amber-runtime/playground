@@ -44,12 +44,12 @@ case "$ACTION" in
 
     echo "==> Restarting ECS services..."
     aws ecs update-service \
-      --cluster aws-group-project-dev \
-      --service aws-group-project-dev-dashboard-api \
+      --cluster amber-dev \
+      --service amber-dev-dashboard-api \
       --force-new-deployment --no-cli-pager
     aws ecs update-service \
-      --cluster aws-group-project-dev \
-      --service aws-group-project-dev-customer-app \
+      --cluster amber-dev \
+      --service amber-dev-customer-app \
       --force-new-deployment --no-cli-pager
 
     echo "==> Deploying frontend..."

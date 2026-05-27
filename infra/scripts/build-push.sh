@@ -33,7 +33,7 @@ echo "==> Logging in to ECR..."
 aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
 
 for svc in "${BUILD_SERVICES[@]}"; do
-  ECR_REPO="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/aws-group-project-dev-${svc}"
+  ECR_REPO="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/amber-dev-${svc}"
   DOCKERFILE="infra/docker/Dockerfile.${svc}"
 
   if [ ! -f "$DOCKERFILE" ]; then
@@ -54,5 +54,5 @@ done
 echo ""
 echo "==> All images built and pushed."
 echo "==> Update ECS services with:"
-echo "    aws ecs update-service --cluster aws-group-project-dev --service aws-group-project-dev-dashboard-api --force-new-deployment"
-echo "    aws ecs update-service --cluster aws-group-project-dev --service aws-group-project-dev-customer-app --force-new-deployment"
+echo "    aws ecs update-service --cluster amber-dev --service amber-dev-dashboard-api --force-new-deployment"
+echo "    aws ecs update-service --cluster amber-dev --service amber-dev-customer-app --force-new-deployment"

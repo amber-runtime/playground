@@ -2,7 +2,7 @@
 # Secrets Manager — DB credentials
 # =============================================================================
 # Your team accesses this with:
-#   aws secretsmanager get-secret-value --secret-id aws-group-project-dev/db
+#   aws secretsmanager get-secret-value --secret-id amber-dev/db
 #
 # Or from app code via AWS SDK — no hardcoded passwords.
 # =============================================================================
