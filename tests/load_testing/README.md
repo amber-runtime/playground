@@ -14,11 +14,24 @@ they do not import the normal customer app agents.
 
 ## Prerequisites
 
-Use one DBOS database for every process:
+Use one dedicated DBOS database for every load-test process. The load-test API,
+worker, and reporter read `.env.load-test` so the normal customer app database
+in `.env` is not used by accident.
 
 ```bash
-export DBOS_SYSTEM_DATABASE_URL='postgresql://user:password@localhost:5432/dbos'
+cp env.load-test.example .env.load-test
 ```
+
+Set `LOAD_TEST_DB_URL` in `.env.load-test` to a database that is safe to fill
+with synthetic workflow history:
+
+```bash
+LOAD_TEST_DB_URL='postgresql://postgres:password@localhost:5432/dbos_load_test'
+```
+
+You can still override this for one command with an exported environment
+variable, but the load-test entrypoints intentionally do not fall back to
+`DB_URL` or `DBOS_SYSTEM_DATABASE_URL`.
 
 Install k6 if it is not already available:
 

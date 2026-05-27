@@ -7,18 +7,20 @@ Run:
 
 from contextlib import asynccontextmanager
 
-from dotenv import load_dotenv
 from fastapi import Body, FastAPI, HTTPException
 from pydantic import BaseModel
 
 from sdk import AgentService, Runtime, list_registered_agents
+from tests.load_testing.config import load_load_test_config
 from tests.load_testing import synthetic_queue_agent
-
-load_dotenv()
 
 SYNTHETIC_AGENT_NAME = "synthetic-queue-agent"
 
-runtime = Runtime()
+load_test_config = load_load_test_config()
+runtime = Runtime(
+    name=load_test_config.runtime_name,
+    db_url=load_test_config.db_url,
+)
 agents = AgentService(runtime)
 
 

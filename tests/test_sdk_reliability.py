@@ -725,7 +725,11 @@ class LoadWorkerTests(unittest.TestCase):
         fake_sdk = types.ModuleType("sdk")
 
         class Runtime:
-            pass
+            instances = []
+
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+                Runtime.instances.append(self)
 
         class WorkerService:
             instances = []
@@ -744,18 +748,27 @@ class LoadWorkerTests(unittest.TestCase):
                 "load_worker_under_test",
                 "tests/load_testing/load_worker.py",
             )
-        return module, WorkerService
+        return module, Runtime, WorkerService
 
     def test_load_worker_passes_env_concurrency_to_worker_service(self):
         with mock.patch.dict(
             os.environ,
-            {"WORKER_CONCURRENCY": "3", "QUEUE_CONCURRENCY": "9"},
+            {
+                "LOAD_TEST_DB_URL": "postgres://load-test",
+                "LOAD_TEST_RUNTIME_NAME": "load-runtime",
+                "WORKER_CONCURRENCY": "3",
+                "QUEUE_CONCURRENCY": "9",
+            },
             clear=True,
         ):
-            module, worker_service = self.load_worker_module()
+            module, runtime, worker_service = self.load_worker_module()
 
             module.main()
 
+        self.assertEqual(
+            runtime.instances[0].kwargs,
+            {"name": "load-runtime", "db_url": "postgres://load-test"},
+        )
         self.assertEqual(worker_service.instances[0].kwargs["queue_name"], "agent-runs")
         self.assertEqual(
             worker_service.instances[0].kwargs["agent_modules"],
@@ -774,6 +787,12 @@ class LoadAppTests(unittest.IsolatedAsyncioTestCase):
         fake_sdk = types.ModuleType("sdk")
 
         class Runtime:
+            instances = []
+
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+                Runtime.instances.append(self)
+
             def start(self, **_kwargs):
                 pass
 
@@ -795,26 +814,34 @@ class LoadAppTests(unittest.IsolatedAsyncioTestCase):
             types.SimpleNamespace(name="synthetic-queue-agent")
         ]
 
-        with mock.patch.dict(
-            sys.modules,
-            {
-                "tests.load_testing.synthetic_queue_agent": fake_agent_module,
-                "sdk": fake_sdk,
-            },
+        modules = {
+            "tests.load_testing.synthetic_queue_agent": fake_agent_module,
+            "sdk": fake_sdk,
+        }
+        env = {
+            "LOAD_TEST_DB_URL": "postgres://load-test",
+            "LOAD_TEST_RUNTIME_NAME": "load-runtime",
+        }
+        with mock.patch.dict(sys.modules, modules), mock.patch.dict(
+            os.environ, env, clear=True
         ):
             module = load_module(
                 "load_app_under_test",
                 "tests/load_testing/load_app.py",
             )
-        return module, AgentService
+        return module, Runtime, AgentService
 
     async def test_load_app_accepts_synthetic_agent_only(self):
-        module, agent_service = self.load_app_module()
+        module, runtime, agent_service = self.load_app_module()
 
         response = await module.create_run(
             module.RunRequest(agent="synthetic-queue-agent", input="sleep=12")
         )
 
+        self.assertEqual(
+            runtime.instances[0].kwargs,
+            {"name": "load-runtime", "db_url": "postgres://load-test"},
+        )
         self.assertEqual(response.workflow_id, "workflow-enqueued")
         self.assertEqual(response.agent, "synthetic-queue-agent")
         self.assertEqual(
@@ -826,6 +853,43 @@ class LoadAppTests(unittest.IsolatedAsyncioTestCase):
             await module.create_run(
                 module.RunRequest(agent="research-handoff-agent", input="hello")
             )
+
+
+class LoadTestConfigTests(unittest.TestCase):
+    def load_config_module(self):
+        return load_module("load_test_config_under_test", "tests/load_testing/config.py")
+
+    def test_load_test_config_requires_load_test_db_url(self):
+        with mock.patch.dict(
+            os.environ,
+            {
+                "DB_URL": "postgres://prod",
+                "DBOS_SYSTEM_DATABASE_URL": "postgres://also-prod",
+            },
+            clear=True,
+        ):
+            config = self.load_config_module()
+            config.ENV_FILE = ROOT / "__missing_load_test_env__"
+
+            with self.assertRaisesRegex(RuntimeError, "LOAD_TEST_DB_URL is required"):
+                config.load_load_test_config()
+
+    def test_load_test_config_reads_dedicated_env(self):
+        with mock.patch.dict(
+            os.environ,
+            {
+                "LOAD_TEST_DB_URL": "postgres://load-test",
+                "LOAD_TEST_RUNTIME_NAME": "custom-load-runtime",
+            },
+            clear=True,
+        ):
+            config = self.load_config_module()
+            config.ENV_FILE = ROOT / "__missing_load_test_env__"
+
+            resolved = config.load_load_test_config()
+
+        self.assertEqual(resolved.db_url, "postgres://load-test")
+        self.assertEqual(resolved.runtime_name, "custom-load-runtime")
 
 
 class DemoRegistrationTests(unittest.TestCase):

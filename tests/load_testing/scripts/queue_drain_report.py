@@ -2,16 +2,19 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import os
+import sys
 import time
 from collections import Counter
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Iterable
 
-from dotenv import load_dotenv
-from sdk.dashboard import DashboardClient
+ROOT_DIR = Path(__file__).resolve().parents[3]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
-load_dotenv()
+from sdk.dashboard import DashboardClient
+from tests.load_testing.config import load_load_test_config
 
 WATCH_STATUSES = ("ENQUEUED", "PENDING", "SUCCESS", "ERROR", "CANCELLED")
 TERMINAL_STATUSES = {"SUCCESS", "ERROR", "CANCELLED", "MAX_RECOVERY_ATTEMPTS_EXCEEDED"}
@@ -62,9 +65,13 @@ def _is_drained(statuses: Iterable[str], *, min_total: int) -> bool:
 
 
 async def run_report(args: argparse.Namespace) -> int:
-    db_url = args.db_url or os.environ.get("DB_URL") or os.environ.get("DBOS_SYSTEM_DATABASE_URL")
-    if not db_url:
-        raise SystemExit("DB_URL or DBOS_SYSTEM_DATABASE_URL must be configured")
+    if args.db_url:
+        db_url = args.db_url
+    else:
+        try:
+            db_url = load_load_test_config().db_url
+        except RuntimeError as exc:
+            raise SystemExit(str(exc)) from exc
 
     start_time = args.start_time or _iso_now()
     started_at = time.monotonic()

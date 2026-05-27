@@ -7,19 +7,20 @@ Run:
 
 import os
 
-from dotenv import load_dotenv
-
 from sdk import Runtime, WorkerService
-
-load_dotenv()
+from tests.load_testing.config import load_load_test_config
 
 
 def main() -> None:
+    load_test_config = load_load_test_config()
     worker_concurrency = int(os.getenv("WORKER_CONCURRENCY", "1"))
     queue_concurrency = os.getenv("QUEUE_CONCURRENCY")
     concurrency = int(queue_concurrency) if queue_concurrency else None
 
-    runtime = Runtime()
+    runtime = Runtime(
+        name=load_test_config.runtime_name,
+        db_url=load_test_config.db_url,
+    )
     worker = WorkerService(
         runtime=runtime,
         agent_modules=[
