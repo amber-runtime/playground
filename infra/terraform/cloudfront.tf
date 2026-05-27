@@ -47,9 +47,10 @@ resource "aws_s3_bucket_policy" "frontend" {
 # --- Distribution ---
 
 resource "aws_cloudfront_distribution" "main" {
-  enabled         = true
-  is_ipv6_enabled = true
-  price_class     = "PriceClass_100" # US, Canada, Europe — cheapest tier
+  enabled             = true
+  is_ipv6_enabled     = true
+  price_class         = "PriceClass_100" # US, Canada, Europe — cheapest tier
+  default_root_object = "index.html"
 
   # Default origin: S3 bucket (frontend static files, served via CloudFront OAC)
   origin {
