@@ -1,6 +1,9 @@
 const state = {
   agents: [],
   selectedAgent: null,
+  requests: [],
+  selectedRequestId: null,
+  activePolls: new Set(),
 };
 
 const specialistList = document.querySelector("#specialist-list");
@@ -10,17 +13,23 @@ const selectedDescription = document.querySelector("#selected-description");
 const taskInput = document.querySelector("#task-input");
 const taskForm = document.querySelector("#task-form");
 const submitButton = document.querySelector("#submit-button");
-const resultPanel = document.querySelector("#result-panel");
-const resultKicker = document.querySelector("#result-kicker");
-const resultTitle = document.querySelector("#result-title");
-const resultMessage = document.querySelector("#result-message");
-const resultOutput = document.querySelector("#result-output");
-const loadingIndicator = document.querySelector("#loading-indicator");
+const requestList = document.querySelector("#request-list");
+const requestCount = document.querySelector("#request-count");
+const responseViewer = document.querySelector("#response-viewer");
+const viewerEmptyState = document.querySelector("#viewer-empty-state");
+const viewerContent = document.querySelector("#viewer-content");
+const viewerKicker = document.querySelector("#viewer-kicker");
+const viewerTitle = document.querySelector("#viewer-title");
+const viewerStatus = document.querySelector("#viewer-status");
+const viewerMessage = document.querySelector("#viewer-message");
+const viewerOutput = document.querySelector("#viewer-output");
 const errorMessage = document.querySelector("#error-message");
 
 const POLL_INTERVAL_MS = 2000;
 const MAX_POLL_ATTEMPTS = 90;
+const MAX_VISIBLE_REQUESTS = 25;
 const PENDING_REQUEST_KEY = "operationsResearchHub.pendingRequest";
+const PENDING_REQUESTS_KEY = "operationsResearchHub.pendingRequests";
 
 function setError(message) {
   if (!message) {
@@ -33,105 +42,242 @@ function setError(message) {
   errorMessage.textContent = message;
 }
 
-function showLoadingResult() {
-  resultPanel.hidden = false;
-  resultPanel.className = "result-panel result-panel-loading";
-  loadingIndicator.hidden = false;
-  resultOutput.hidden = true;
-  resultOutput.textContent = "";
-  resultKicker.textContent = "Working on your request";
-  resultTitle.textContent = "Working on your request";
-  resultMessage.textContent = "This can take a moment while the workflow completes.";
+function createRequestId() {
+  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+  return `request-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function showStillWorkingResult() {
-  showLoadingResult();
-  resultMessage.textContent = "Still working on your request. We'll keep checking for the response.";
+function formatRequestTime(timestamp) {
+  return new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(timestamp));
 }
 
-function showFinalResult(output) {
-  resultPanel.className = "result-panel result-panel-success";
-  loadingIndicator.hidden = true;
-  resultOutput.hidden = false;
-  resultKicker.textContent = "Response";
-  resultTitle.textContent = "Response";
-  resultMessage.textContent = "";
-  resultOutput.textContent = output || "The request completed, but no response was returned.";
+function requestStatusLabel(status) {
+  if (status === "STARTING") return "Starting";
+  if (status === "SUCCESS") return "Complete";
+  if (status === "ERROR" || status === "CANCELLED") return "Needs attention";
+  if (status === "TIMEOUT") return "Still working";
+  return "Working";
 }
 
-function showFailedResult(message) {
-  resultPanel.hidden = false;
-  resultPanel.className = "result-panel result-panel-error";
-  loadingIndicator.hidden = true;
-  resultOutput.hidden = true;
-  resultOutput.textContent = "";
-  resultKicker.textContent = "We could not complete this request";
-  resultTitle.textContent = "We could not complete this request";
-  resultMessage.textContent = message;
+function requestSummary(request) {
+  if (request.status === "SUCCESS") return "Response ready";
+  if (request.status === "ERROR" || request.status === "CANCELLED") {
+    return "Please try again or ask your operations team for help.";
+  }
+  if (request.status === "TIMEOUT") return "Still checking for the response";
+  if (request.status === "STARTING") return "Starting request";
+  return "Working on your request";
+}
+
+function requestPreview(input) {
+  const normalized = input.replace(/\s+/g, " ").trim();
+  if (!normalized) return "No request details";
+  return normalized.length > 94 ? `${normalized.slice(0, 91)}...` : normalized;
+}
+
+function savePendingRequests() {
+  const pendingRequests = state.requests
+    .filter((request) => request.workflowId && !isTerminalStatus(request.status))
+    .map((request) => ({
+      id: request.id,
+      workflowId: request.workflowId,
+      displayName: request.displayName,
+      category: request.category,
+      input: request.input,
+      status: request.status,
+      startedAt: request.startedAt,
+      updatedAt: request.updatedAt,
+    }));
+
+  if (pendingRequests.length === 0) {
+    window.localStorage.removeItem(PENDING_REQUESTS_KEY);
+    window.localStorage.removeItem(PENDING_REQUEST_KEY);
+    return;
+  }
+
+  window.localStorage.setItem(PENDING_REQUESTS_KEY, JSON.stringify(pendingRequests));
+  window.localStorage.removeItem(PENDING_REQUEST_KEY);
+}
+
+function loadPendingRequests() {
+  const requests = [];
+
+  try {
+    const raw = window.localStorage.getItem(PENDING_REQUESTS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    if (Array.isArray(parsed)) {
+      parsed.forEach((request) => {
+        if (request?.workflowId) requests.push(request);
+      });
+    }
+  } catch {
+    window.localStorage.removeItem(PENDING_REQUESTS_KEY);
+  }
+
+  try {
+    const raw = window.localStorage.getItem(PENDING_REQUEST_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (parsed?.workflow_id) {
+      requests.push({
+        id: createRequestId(),
+        workflowId: parsed.workflow_id,
+        displayName: parsed.display_name || "Recovered request",
+        category: "Request",
+        input: "",
+        status: "WORKING",
+        startedAt: parsed.started_at || Date.now(),
+        updatedAt: Date.now(),
+      });
+    }
+  } catch {
+    window.localStorage.removeItem(PENDING_REQUEST_KEY);
+  }
+
+  return requests;
+}
+
+function isTerminalStatus(status) {
+  return status === "SUCCESS" || status === "ERROR" || status === "CANCELLED";
+}
+
+function getRequest(requestId) {
+  return state.requests.find((request) => request.id === requestId);
+}
+
+function addRequest(request) {
+  state.requests.unshift(request);
+  state.requests = state.requests.slice(0, MAX_VISIBLE_REQUESTS);
+  state.selectedRequestId = request.id;
+  renderRequests();
+  renderViewer();
+  savePendingRequests();
+}
+
+function updateRequest(requestId, updates) {
+  const request = getRequest(requestId);
+  if (!request) return null;
+
+  Object.assign(request, updates, { updatedAt: Date.now() });
+  renderRequests();
+  if (state.selectedRequestId === requestId) renderViewer();
+  savePendingRequests();
+  return request;
+}
+
+function selectRequest(requestId) {
+  state.selectedRequestId = requestId;
+  renderRequests();
+  renderViewer();
+}
+
+function renderRequests() {
+  requestList.innerHTML = "";
+  requestCount.textContent = String(state.requests.length);
+
+  if (state.requests.length === 0) {
+    requestList.innerHTML = '<div class="empty-state">Started requests will appear here.</div>';
+    return;
+  }
+
+  state.requests.forEach((request) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `request-card request-card-${request.status.toLowerCase()}`;
+    button.dataset.requestId = request.id;
+    button.setAttribute("aria-pressed", String(state.selectedRequestId === request.id));
+
+    const topLine = document.createElement("span");
+    topLine.className = "request-topline";
+    topLine.textContent = `${request.category} · ${formatRequestTime(request.startedAt)}`;
+
+    const title = document.createElement("strong");
+    title.textContent = request.displayName;
+
+    const status = document.createElement("span");
+    status.className = "request-status";
+    status.textContent = requestStatusLabel(request.status);
+
+    const preview = document.createElement("span");
+    preview.className = "request-preview";
+    preview.textContent = requestSummary(request);
+
+    button.append(topLine, title, status, preview);
+    button.addEventListener("click", () => selectRequest(request.id));
+    requestList.appendChild(button);
+  });
+}
+
+function renderViewer() {
+  const request = getRequest(state.selectedRequestId);
+  if (!request) {
+    viewerEmptyState.hidden = false;
+    viewerContent.hidden = true;
+    responseViewer.className = "response-viewer";
+    return;
+  }
+
+  viewerEmptyState.hidden = true;
+  viewerContent.hidden = false;
+  responseViewer.className = `response-viewer response-viewer-${request.status.toLowerCase()}`;
+  viewerKicker.textContent = requestStatusLabel(request.status);
+  viewerTitle.textContent = request.displayName;
+  viewerStatus.textContent = requestStatusLabel(request.status);
+  viewerMessage.textContent = requestSummary(request);
+
+  if (request.status === "SUCCESS") {
+    viewerOutput.hidden = false;
+    viewerOutput.textContent =
+      request.output || "The request completed, but no response was returned.";
+  } else if (request.status === "ERROR" || request.status === "CANCELLED") {
+    viewerOutput.hidden = true;
+    viewerOutput.textContent = "";
+  } else {
+    viewerOutput.hidden = false;
+    viewerOutput.textContent = requestPreview(request.input);
+  }
 }
 
 function wait(ms) {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
-function savePendingRequest(workflowId, displayName) {
-  const pendingRequest = {
-    workflow_id: workflowId,
-    display_name: displayName,
-    started_at: Date.now(),
-  };
-  window.localStorage.setItem(PENDING_REQUEST_KEY, JSON.stringify(pendingRequest));
-}
+async function pollRunResult(requestId) {
+  const request = getRequest(requestId);
+  if (!request?.workflowId || state.activePolls.has(requestId)) return;
 
-function loadPendingRequest() {
-  try {
-    const raw = window.localStorage.getItem(PENDING_REQUEST_KEY);
-    if (!raw) return null;
+  state.activePolls.add(requestId);
+  updateRequest(requestId, { status: "WORKING" });
 
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed.workflow_id !== "string") return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function clearPendingRequest() {
-  window.localStorage.removeItem(PENDING_REQUEST_KEY);
-}
-
-async function pollRunResult(workflowId) {
   for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt += 1) {
     try {
-      const response = await fetch(`/runs/${encodeURIComponent(workflowId)}`);
+      const response = await fetch(`/runs/${encodeURIComponent(request.workflowId)}`);
       if (response.ok) {
         const run = await response.json();
-        if (run.status === "SUCCESS") return run;
-        if (run.status === "ERROR" || run.status === "CANCELLED") return run;
+        if (run.status === "SUCCESS") {
+          updateRequest(requestId, { status: "SUCCESS", output: run.output });
+          state.activePolls.delete(requestId);
+          savePendingRequests();
+          return;
+        }
+        if (run.status === "ERROR" || run.status === "CANCELLED") {
+          updateRequest(requestId, { status: run.status });
+          state.activePolls.delete(requestId);
+          savePendingRequests();
+          return;
+        }
       }
     } catch {
       // The app may be restarting during the crash demo. Keep polling quietly.
     }
 
-    if (attempt > 0) showStillWorkingResult();
-
     await wait(POLL_INTERVAL_MS);
   }
 
-  return { status: "TIMEOUT", output: null };
-}
-
-async function watchRun(workflowId) {
-  const run = await pollRunResult(workflowId);
-  if (run.status === "SUCCESS") {
-    clearPendingRequest();
-    showFinalResult(run.output);
-  } else if (run.status === "ERROR" || run.status === "CANCELLED") {
-    clearPendingRequest();
-    showFailedResult("Please try again or ask your operations team for help.");
-  } else {
-    showStillWorkingResult();
-  }
+  updateRequest(requestId, { status: "TIMEOUT" });
+  state.activePolls.delete(requestId);
 }
 
 function renderSpecialists() {
@@ -214,9 +360,21 @@ taskForm.addEventListener("submit", async (event) => {
     return;
   }
 
+  const requestId = createRequestId();
+  addRequest({
+    id: requestId,
+    workflowId: null,
+    displayName: state.selectedAgent.display_name,
+    category: state.selectedAgent.category,
+    input,
+    status: "STARTING",
+    output: null,
+    startedAt: Date.now(),
+    updatedAt: Date.now(),
+  });
+
   submitButton.disabled = true;
   submitButton.textContent = "Starting...";
-  showLoadingResult();
 
   try {
     const response = await fetch("/runs", {
@@ -234,20 +392,33 @@ taskForm.addEventListener("submit", async (event) => {
     }
 
     const result = await response.json();
-    savePendingRequest(result.workflow_id, state.selectedAgent.display_name);
-    await watchRun(result.workflow_id);
+    updateRequest(requestId, { workflowId: result.workflow_id, status: "WORKING" });
+    pollRunResult(requestId);
   } catch (error) {
-    showFailedResult("We could not start this request. Please try again.");
+    updateRequest(requestId, { status: "ERROR" });
+    setError("We could not start this request. Please try again.");
   } finally {
     submitButton.disabled = false;
     submitButton.textContent = "Start request";
   }
 });
 
-loadAgents();
+loadPendingRequests().forEach((request) => {
+  addRequest({
+    id: request.id || createRequestId(),
+    workflowId: request.workflowId,
+    displayName: request.displayName || "Recovered request",
+    category: request.category || "Request",
+    input: request.input || "",
+    status: "WORKING",
+    output: null,
+    startedAt: request.startedAt || Date.now(),
+    updatedAt: request.updatedAt || Date.now(),
+  });
+});
 
-const pendingRequest = loadPendingRequest();
-if (pendingRequest) {
-  showStillWorkingResult();
-  watchRun(pendingRequest.workflow_id);
-}
+state.requests.forEach((request) => {
+  pollRunResult(request.id);
+});
+
+loadAgents();
