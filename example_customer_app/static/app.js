@@ -256,7 +256,7 @@ async function pollRunResult(requestId) {
 
   for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt += 1) {
     try {
-      const response = await fetch(`/runs/${encodeURIComponent(request.workflowId)}`);
+      const response = await fetch(`runs/${encodeURIComponent(request.workflowId)}`);
       if (response.ok) {
         const run = await response.json();
         if (run.status === "SUCCESS") {
@@ -338,7 +338,7 @@ function selectAgent(agentName, replaceInput) {
 
 async function loadAgents() {
   try {
-    const response = await fetch("/agents");
+    const response = await fetch("agents");
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
     state.agents = await response.json();
@@ -386,7 +386,7 @@ taskForm.addEventListener("submit", async (event) => {
   try {
     const shouldCrashDuringHotel =
       state.selectedAgent.name === TRAVEL_AGENT_NAME && travelCrashToggle.checked;
-    const runsUrl = shouldCrashDuringHotel ? "/runs?crash_during_hotel=true" : "/runs";
+    const runsUrl = shouldCrashDuringHotel ? "runs?crash_during_hotel=true" : "runs";
     const response = await fetch(runsUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

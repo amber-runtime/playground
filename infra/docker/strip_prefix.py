@@ -21,7 +21,6 @@ def _strip_prefix(app, prefixes: list[str]):
                     scope["path"] = path[len(prefix):] or "/"
                     raw_path = scope.get("raw_path", b"")
                     scope["raw_path"] = raw_path[len(prefix.encode()):] or b"/"
-                    scope["root_path"] = prefix
                     break
         await app(scope, receive, send)
 
