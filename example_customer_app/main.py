@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 # Import agent modules so their @register_agent workflows are registered.
 from .user_agents import (
     multi_agent_demo,
+    error_agent_demo,
     queued_multi_agent_demo,
     single_agent_demo,  # noqa: F401
 )
@@ -96,7 +97,18 @@ KNOWN_AGENT_CAPABILITIES = {
             "departing 2026-07-10 and returning 2026-07-13, budget $3000."
         ),
     },
+    "travel-concierge-error-demo": {
+        "display_name": "Site Visit Planner Error Demo",
+        "description": "Same travel workflow, but intentionally fails every hotel quote lookup.",
+        "category": "Travel Demo",
+        "sample_input": (
+            "Plan a 3-night vendor site visit to Tokyo from SFO for 2 people, "
+            "departing 2026-07-10 and returning 2026-07-13, budget $3000."
+        ),
+    },
 }
+TRAVEL_AGENT_NAME = "travel-concierge"
+TRAVEL_ERROR_DEMO_AGENT_NAME = "travel-concierge-error-demo"
 
 
 def _humanize_agent_name(name: str) -> str:
@@ -122,9 +134,17 @@ def _agent_capability(name: str) -> RegisteredAgentResponse:
 
 
 def _should_arm_travel_crash(agent: str, *, crash_during_hotel: bool) -> bool:
-    if agent != "travel-concierge":
+    if agent not in {TRAVEL_AGENT_NAME, TRAVEL_ERROR_DEMO_AGENT_NAME}:
         return False
     return crash_during_hotel
+
+
+def _arm_travel_crash_input(agent: str, run_input: str) -> str:
+    if agent == TRAVEL_AGENT_NAME:
+        return multi_agent_demo.request_hotel_crash_demo(run_input)
+    if agent == TRAVEL_ERROR_DEMO_AGENT_NAME:
+        return error_agent_demo.enable_hotel_quote_crash(run_input)
+    return run_input
 
 
 app = FastAPI(
@@ -232,7 +252,7 @@ async def create_run(
         request.agent,
         crash_during_hotel=crash_during_hotel,
     ):
-        run_input = multi_agent_demo.request_hotel_crash_demo(run_input)
+        run_input = _arm_travel_crash_input(request.agent, run_input)
 
     handle = await agents.start(request.agent, run_input)
     return RunResponse(workflow_id=handle.workflow_id, agent=request.agent)
