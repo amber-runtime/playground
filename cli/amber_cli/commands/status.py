@@ -99,9 +99,9 @@ def status(env: str) -> None:
     base_url = f"https://{cloudfront_domain}" if cloudfront_domain else f"http://{alb_dns}"
 
     checks = [
+        ("Dashboard (SPA)", f"{base_url}/"),
         ("Dashboard API", f"{base_url}/dashboard/workflows"),
-        ("Customer App", f"{base_url}/demo/health"),
-        ("Frontend", f"{base_url}/"),
+        ("Demo", f"{base_url}/demo/health"),
     ]
 
     health_table = Table(show_header=True, header_style="bold")
@@ -139,6 +139,32 @@ def status(env: str) -> None:
             console.print("  (no agents registered)")
     except Exception:
         console.print("  [yellow]Could not fetch agents — service may still be starting[/yellow]")
+
+    console.print()
+
+    # ── Secrets ───────────────────────────────────────────────────────────────
+    console.print("[bold cyan]Secrets[/bold cyan]")
+    from amber_cli.config_loader import resolve_secret_path, SECRET_REGISTRY
+
+    ssm = boto3.client("ssm", region_name=region)
+    for key, meta in SECRET_REGISTRY.items():
+        if meta.get("readonly"):
+            continue
+        try:
+            path = meta["path"].format(
+                ssm_base=cfg.ssm_base,
+                secrets_prefix=cfg.secrets_prefix,
+            )
+            resp = ssm.get_parameter(Name=path, WithDecryption=True)
+            value = resp["Parameter"]["Value"]
+            if "placeholder" in value.lower() or "set-me" in value.lower():
+                console.print(f"  [yellow]{key}: PLACEHOLDER — run 'amber config set {key}'[/yellow]")
+            else:
+                console.print(f"  [green]{key}: set[/green]")
+        except ssm.exceptions.ParameterNotFound:
+            console.print(f"  [red]{key}: NOT SET — run 'amber config set {key}'[/red]")
+        except Exception as e:
+            console.print(f"  {key}: error — {e}")
 
     console.print()
 
