@@ -126,11 +126,26 @@ def _deploy_frontend(bucket: str, dist_id: str, repo_root: str, region: str) -> 
     dist_dir = os.path.join(repo_root, "dashboard", "dist")
     s3 = boto3.client("s3", region_name=region)
 
+    CONTENT_TYPES = {
+        ".html": "text/html; charset=utf-8",
+        ".css": "text/css; charset=utf-8",
+        ".js": "application/javascript; charset=utf-8",
+        ".json": "application/json",
+        ".svg": "image/svg+xml",
+        ".png": "image/png",
+        ".ico": "image/x-icon",
+        ".woff": "font/woff",
+        ".woff2": "font/woff2",
+    }
+
     for root, _, files in os.walk(dist_dir):
         for fname in files:
             local_path = os.path.join(root, fname)
             key = os.path.relpath(local_path, dist_dir)
-            s3.upload_file(local_path, bucket, key)
+            ext = os.path.splitext(fname)[1].lower()
+            content_type = CONTENT_TYPES.get(ext)
+            extra_args = {"ContentType": content_type} if content_type else {}
+            s3.upload_file(local_path, bucket, key, ExtraArgs=extra_args)
             console.print(f"  uploaded: {key}")
 
     if dist_id:
