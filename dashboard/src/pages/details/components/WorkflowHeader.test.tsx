@@ -37,19 +37,27 @@ describe('WorkflowHeader', () => {
 
     render(
       <WorkflowHeader
-        workflow={makeWorkflow({ recovery_attempts: 2, attempts: 2 })}
+        workflow={makeWorkflow({ recovery_attempts: 2 })}
         steps={[makeStep({ tokens_in: 1_000, tokens_out: 500 }), makeToolStep()]}
       />,
     )
 
     expect(screen.getByRole('heading', { name: 'Research Assistant' })).toBeInTheDocument()
     expect(screen.getByText('Success')).toBeInTheDocument()
-    expect(screen.getByText('Attempts: 2')).toBeInTheDocument()
+    expect(screen.getByText('Retries: 1')).toBeInTheDocument()
     expect(screen.getByText(/LLM call/)).toBeInTheDocument()
     expect(screen.getByText(/Tool call/)).toBeInTheDocument()
     expect(screen.getAllByText('1')).toHaveLength(2)
     expect(screen.getByText('1,000 in · 500 out')).toBeInTheDocument()
     expect(screen.getByText('<$0.01')).toBeInTheDocument()
+  })
+
+  it('hides the retries badge for a fresh workflow with no recoveries', () => {
+    render(
+      <WorkflowHeader workflow={makeWorkflow()} steps={[]} />,
+    )
+
+    expect(screen.queryByText(/Retries/)).not.toBeInTheDocument()
   })
 
   it('renders pending workflow duration from the live clock', () => {

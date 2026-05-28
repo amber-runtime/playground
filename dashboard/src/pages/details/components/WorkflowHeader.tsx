@@ -156,7 +156,7 @@ export function WorkflowHeader({ workflow, steps, onActionSuccess }: Props) {
   const totalDuration = formatWorkflowDuration(workflow, nowMs)
   const tokensIn = sumTokensIn(steps)
   const tokensOut = sumTokensOut(steps)
-  const attempts = workflow.attempts
+  const retries = workflow.recoveries
   const cost = estimateCost(steps)
   const llmCalls = countLlmCalls(steps)
   const toolCalls = countToolCalls(steps)
@@ -242,13 +242,9 @@ export function WorkflowHeader({ workflow, steps, onActionSuccess }: Props) {
 
         <StatItem label="Duration" value={totalDuration} />
 
-        {attempts != null && attempts > 0 && (
-          <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${
-            attempts === 1
-              ? 'bg-slate-800 text-slate-400 border-slate-700'
-              : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
-          }`}>
-            Attempts: {attempts}
+        {retries > 0 && (
+          <span className="px-2 py-0.5 rounded-full text-xs font-medium border bg-amber-500/15 text-amber-300 border-amber-500/30">
+            Retries: {retries}
           </span>
         )}
 

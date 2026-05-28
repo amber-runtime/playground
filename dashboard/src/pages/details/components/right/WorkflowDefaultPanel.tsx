@@ -115,7 +115,7 @@ export function WorkflowDefaultPanel({ workflow, steps }: Props) {
   const inputAvailable = false   // backend-blocked; field doesn't exist on WorkflowInfo yet
   const finalAnswerExpandedByDefault =
     workflow.status === 'SUCCESS' && workflow.output != null
-  const attempts = workflow.attempts
+  const retries = workflow.recoveries
   const agents = countAgents(steps)
   const models = uniqueModels(steps)
   const pricingSyncedAt = usePricingSyncedAt()
@@ -131,8 +131,8 @@ export function WorkflowDefaultPanel({ workflow, steps }: Props) {
     ['Created', formatTimestamp(workflow.created_at)],
     ['Updated', formatTimestamp(workflow.updated_at)],
     ['Status', <StatusBadge key="status" status={workflow.status} />],
-    ...(attempts != null && attempts > 0
-      ? ([['Attempts', String(attempts)]] as Array<[string, React.ReactNode]>)
+    ...(retries > 0
+      ? ([['Retries', String(retries)]] as Array<[string, React.ReactNode]>)
       : []),
     [
       'Agents',
