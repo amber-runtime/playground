@@ -61,7 +61,7 @@ def status(env: str) -> None:
     console.print("[bold cyan]ECS Services[/bold cyan]")
     ecs = boto3.client("ecs", region_name=region)
     cluster = prefix
-    service_names = [f"{prefix}-dashboard-api", f"{prefix}-customer-app"]
+    service_names = [f"{prefix}-dashboard-api", f"{prefix}-customer-app", f"{prefix}-customer-worker"]
 
     table = Table(show_header=True, header_style="bold")
     table.add_column("Service")
