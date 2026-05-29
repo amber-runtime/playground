@@ -318,20 +318,20 @@ def scrape_deep_competitive_signals(company: str, industry: str) -> str:
     for i, query_template in enumerate(_DEEP_SCAN_QUERIES, start=1):
         query = query_template.format(company=company, industry=industry)
         # DEMO FORK 2: Uncomment the next line to add backoff so the deep scan succeeds.
-        time.sleep(1.5)
+        # time.sleep(1.5)
 
         elapsed = time.monotonic() - last_query_time
 
         # DEMO FORK 1: Uncomment the next line to reveal the real failure cause in logs.
-        if i == 3 and elapsed < _RATELIMIT_THRESHOLD_SECONDS:
-            logger.warning(
-                "DuckDuckGo deep scan throttled on query %d/%d for %s: %.2fs since last search is below the %.2fs safety threshold; likely scraper rate limit",
-                i,
-                len(_DEEP_SCAN_QUERIES),
-                company,
-                elapsed,
-                _RATELIMIT_THRESHOLD_SECONDS,
-            )
+        # if i == 3 and elapsed < _RATELIMIT_THRESHOLD_SECONDS:
+        #     logger.warning(
+        #         "DuckDuckGo deep scan throttled on query %d/%d for %s: %.2fs since last search is below the %.2fs safety threshold; likely scraper rate limit",
+        #         i,
+        #         len(_DEEP_SCAN_QUERIES),
+        #         company,
+        #         elapsed,
+        #         _RATELIMIT_THRESHOLD_SECONDS,
+        #     )
 
         if (
             workflow_id in _ratelimit_workflows
