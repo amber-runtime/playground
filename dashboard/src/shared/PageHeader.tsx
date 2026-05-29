@@ -19,7 +19,6 @@ export function PageHeader({ actions }: PageHeaderProps) {
       <div className={`${PAGE_CONTENT_WIDTH_CLASS} flex items-center justify-between`}>
         <div className="flex items-center gap-4">
           <span className="text-amber-500 font-semibold tracking-tight text-xl">Amber</span>
-          <span className="text-slate-700 select-none">·</span>
           <nav className="flex items-center gap-4">
             <NavLink to="/" end className={navClass}>
               Workflows

@@ -1336,100 +1336,10 @@ class DemoRegistrationTests(unittest.TestCase):
         self.assertNotIn("RANDOM_TRAVEL_CRASH_RATE", source)
         self.assertNotIn("random.random", source)
 
-    def test_enterprise_branch_is_deterministic_from_account_signals(self):
+    def test_account_research_helpers_append_and_strip_directives(self):
         demo = load_module(
-            "enterprise_onboarding_branch_under_test",
-            "example_customer_app/user_agents/error_agent_demo.py",
-        )
-
-        standard = demo.normalize_onboarding_request(
-            "Prepare onboarding notes for Acorn Software with 220 seats in the US."
-        )
-        enterprise = demo.normalize_onboarding_request(
-            "Prepare onboarding notes for Northstar Health, an enterprise customer "
-            "with 1800 seats across the US and EU. Procurement review required."
-        )
-
-        self.assertEqual(
-            demo.determine_workflow_branch(standard, force_enterprise_branch=False),
-            "standard_onboarding",
-        )
-        self.assertEqual(
-            demo.determine_workflow_branch(enterprise, force_enterprise_branch=False),
-            "enterprise_compliance",
-        )
-        self.assertEqual(
-            demo.determine_workflow_branch(standard, force_enterprise_branch=True),
-            "enterprise_compliance",
-        )
-
-    def test_enterprise_demo_helpers_append_and_strip_directives(self):
-        demo = load_module(
-            "enterprise_onboarding_directives_under_test",
-            "example_customer_app/user_agents/error_agent_demo.py",
-        )
-
-        armed = demo.enable_enterprise_failure_demo("Start onboarding for Northstar Health")
-        cleaned, force_branch, fail_handoff = demo._extract_demo_directives(armed)
-
-        self.assertEqual(cleaned, "Start onboarding for Northstar Health")
-        self.assertTrue(force_branch)
-        self.assertTrue(fail_handoff)
-
-    def test_enterprise_failure_is_only_armed_by_explicit_toggle(self):
-        source_path = ROOT / "example_customer_app" / "main.py"
-        source = source_path.read_text(encoding="utf-8")
-        module = ast.parse(source)
-        helpers = {
-            node.name: node
-            for node in module.body
-            if isinstance(node, ast.FunctionDef)
-            and node.name
-            in {"_should_fail_compliance_handoff", "_arm_enterprise_failure_input"}
-        }
-        namespace: dict[str, object] = {}
-        error_agent_demo_stub = types.SimpleNamespace(
-            enable_enterprise_compliance_branch=lambda value: f"{value}\n[force]",
-            enable_compliance_handoff_failure=lambda value: f"{value}\n[fail]",
-        )
-        namespace["error_agent_demo"] = error_agent_demo_stub
-        exec(
-            compile(
-                ast.Module(
-                    [
-                        helpers["_should_fail_compliance_handoff"],
-                        helpers["_arm_enterprise_failure_input"],
-                    ],
-                    [],
-                ),
-                str(source_path),
-                "exec",
-            ),
-            namespace,
-        )
-
-        self.assertFalse(
-            namespace["_should_fail_compliance_handoff"](
-                "research-assistant",
-                fail_compliance_handoff=True,
-            )
-        )
-        self.assertTrue(
-            namespace["_should_fail_compliance_handoff"](
-                "enterprise-onboarding-error-demo",
-                fail_compliance_handoff=True,
-            )
-        )
-        self.assertEqual(
-            namespace["_arm_enterprise_failure_input"]("demo request"),
-            "demo request\n[force]\n[fail]",
-        )
-        self.assertNotIn("force_enterprise_compliance:", source)
-
-    def test_account_research_v2_helpers_append_and_strip_directives(self):
-        demo = load_module(
-            "account_research_error_demo_v2_directives_under_test",
-            "example_customer_app/user_agents/account_research_error_demo_v2.py",
+            "account_research_error_demo_directives_under_test",
+            "example_customer_app/user_agents/account_research_error_demo.py",
         )
 
         armed = demo.enable_account_research_failure_demo(
@@ -1453,12 +1363,12 @@ class DemoRegistrationTests(unittest.TestCase):
 
         self.assertEqual(decorators.current_workflow_id(), "sdk-workflow-123")
 
-    def test_account_research_v2_deep_scan_fails_on_third_query_when_armed(self):
+    def test_account_research_deep_scan_fails_on_third_query_when_armed(self):
         demo = load_module(
-            "account_research_error_demo_v2_failure_under_test",
-            "example_customer_app/user_agents/account_research_error_demo_v2.py",
+            "account_research_error_demo_failure_under_test",
+            "example_customer_app/user_agents/account_research_error_demo.py",
         )
-        self.DBOS.workflow_id = "account-research-v2-deep-scan-fail"
+        self.DBOS.workflow_id = "account-research-deep-scan-fail"
         demo._ratelimit_workflows.add(self.DBOS.workflow_id)
 
         with mock.patch.object(
@@ -1475,12 +1385,12 @@ class DemoRegistrationTests(unittest.TestCase):
                     "logistics",
                 )
 
-    def test_account_research_v2_deep_scan_succeeds_without_ratelimit(self):
+    def test_account_research_deep_scan_succeeds_without_ratelimit(self):
         demo = load_module(
-            "account_research_error_demo_v2_success_under_test",
-            "example_customer_app/user_agents/account_research_error_demo_v2.py",
+            "account_research_error_demo_success_under_test",
+            "example_customer_app/user_agents/account_research_error_demo.py",
         )
-        self.DBOS.workflow_id = "account-research-v2-deep-scan-ok"
+        self.DBOS.workflow_id = "account-research-deep-scan-ok"
         demo._ratelimit_workflows.clear()
 
         with mock.patch.object(
@@ -1497,12 +1407,12 @@ class DemoRegistrationTests(unittest.TestCase):
         self.assertEqual(parsed["query_count"], 5)
         self.assertEqual(len(parsed["signals"]), 5)
 
-    def test_account_research_v2_email_receipt_uses_workflow_id(self):
+    def test_account_research_email_receipt_uses_workflow_id(self):
         demo = load_module(
-            "account_research_error_demo_v2_receipt_under_test",
-            "example_customer_app/user_agents/account_research_error_demo_v2.py",
+            "account_research_error_demo_receipt_under_test",
+            "example_customer_app/user_agents/account_research_error_demo.py",
         )
-        self.DBOS.workflow_id = "account-research-v2-1"
+        self.DBOS.workflow_id = "account-research-1"
 
         with tempfile.TemporaryDirectory() as tmpdir:
             receipt_dir = Path(tmpdir)
@@ -1513,16 +1423,16 @@ class DemoRegistrationTests(unittest.TestCase):
                     "Short brief",
                 )
 
-            receipt_path = receipt_dir / "account-research-v2-1.json"
+            receipt_path = receipt_dir / "account-research-1.json"
             self.assertTrue(receipt_path.exists())
             parsed = json.loads(receipt)
-            self.assertEqual(parsed["workflow_id"], "account-research-v2-1")
+            self.assertEqual(parsed["workflow_id"], "account-research-1")
             self.assertEqual(parsed["status"], "sent")
 
-    def test_account_research_v2_workflow_propagates_failure_when_armed(self):
+    def test_account_research_workflow_propagates_failure_when_armed(self):
         demo = load_module(
-            "account_research_error_demo_v2_workflow_failure_under_test",
-            "example_customer_app/user_agents/account_research_error_demo_v2.py",
+            "account_research_error_demo_workflow_failure_under_test",
+            "example_customer_app/user_agents/account_research_error_demo.py",
         )
 
         async def fake_run_standard_research(_account):
@@ -1562,12 +1472,12 @@ class DemoRegistrationTests(unittest.TestCase):
             ),
         ):
             asyncio.run(
-                demo.account_research_error_demo_v2(
+                demo.account_research_error_demo(
                     demo.enable_account_research_failure_demo(demo.SAMPLE_INPUT)
                 )
             )
 
-    def test_account_research_failure_toggle_supports_v1_and_v2(self):
+    def test_account_research_failure_toggle_supports_canonical_demo(self):
         source_path = ROOT / "example_customer_app" / "main.py"
         source = source_path.read_text(encoding="utf-8")
         module = ast.parse(source)
@@ -1583,10 +1493,7 @@ class DemoRegistrationTests(unittest.TestCase):
         }
         namespace: dict[str, object] = {}
         namespace["account_research_error_demo"] = types.SimpleNamespace(
-            enable_account_research_failure_demo=lambda value: f"{value}\n[v1]",
-        )
-        namespace["account_research_error_demo_v2"] = types.SimpleNamespace(
-            enable_account_research_failure_demo=lambda value: f"{value}\n[v2]",
+            enable_account_research_failure_demo=lambda value: f"{value}\n[armed]",
         )
         exec(
             compile(
@@ -1609,12 +1516,6 @@ class DemoRegistrationTests(unittest.TestCase):
                 trigger_account_research_ratelimit=True,
             )
         )
-        self.assertTrue(
-            namespace["_should_arm_account_research_ratelimit"](
-                "account-research-error-demo-v2",
-                trigger_account_research_ratelimit=True,
-            )
-        )
         self.assertFalse(
             namespace["_should_arm_account_research_ratelimit"](
                 "research-assistant",
@@ -1622,11 +1523,8 @@ class DemoRegistrationTests(unittest.TestCase):
             )
         )
         self.assertEqual(
-            namespace["_arm_account_research_ratelimit_input"](
-                "account-research-error-demo-v2",
-                "demo request",
-            ),
-            "demo request\n[v2]",
+            namespace["_arm_account_research_ratelimit_input"]("demo request"),
+            "demo request\n[armed]",
         )
 
     def test_hotel_crash_marker_prevents_repeated_crashes(self):

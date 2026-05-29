@@ -1,22 +1,15 @@
 import hashlib
 import json
 import re
-import time  # used by the commented rate-limit backoff in scrape_deep_competitive_signals
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from agents import Agent, function_tool
-from dbos import DBOS
 from ddgs import DDGS
 
-from sdk import agent_runner, logger, register_agent, step
-
-try:
-    from ddgs import DDGSException
-except ImportError:  # pragma: no cover
-    class DDGSException(Exception):  # type: ignore[no-redef]
-        pass
+from sdk import agent_runner, current_workflow_id, logger, register_agent, step
 
 
 BRIEF_CLOCK = datetime(2026, 6, 4, 9, 0, tzinfo=timezone.utc)
@@ -26,12 +19,7 @@ REQUIRED_RESEARCH_MODULES = ("news_research", "market_positioning", "tech_stack_
 ENTERPRISE_BRANCH_DIRECTIVE = "[demo:enterprise_account]"
 TRIGGER_RATELIMIT_DIRECTIVE = "[demo:trigger_ratelimit]"
 
-# Rate-limit fires when queries arrive faster than this threshold.
-# Uncommenting time.sleep(1.5) inside the loop paces them above the threshold.
 _RATELIMIT_THRESHOLD_SECONDS = 1.0
-
-# Workflow IDs that should simulate rate limiting. Set directly in Python from the
-# directive — never passed through the LLM, which would silently drop boolean flags.
 _ratelimit_workflows: set[str] = set()
 
 OUTREACH_RECEIPT_DIR = Path("/tmp/amber-account-research-outreach-receipts")
@@ -42,8 +30,6 @@ SAMPLE_INPUT = (
     "their tech stack, and pricing signals before we can position correctly."
 )
 
-
-# ── Utilities ─────────────────────────────────────────────────────────────────
 
 def _stable_int(*parts: str, modulo: int = 1000) -> int:
     digest = hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
@@ -62,20 +48,15 @@ def _workflow_file_key(workflow_id: str) -> str:
     return workflow_id.replace("/", "_")
 
 
-# ── Demo directive helpers (exported to main.py) ───────────────────────────────
-
 def enable_enterprise_account(request: str) -> str:
-    """Force the enterprise deep-scan branch regardless of prompt content."""
     return f"{request}\n\n{ENTERPRISE_BRANCH_DIRECTIVE}"
 
 
 def enable_ratelimit_trigger(request: str) -> str:
-    """Enable the timing-based DDGSException simulation in the deep scan."""
     return f"{request}\n\n{TRIGGER_RATELIMIT_DIRECTIVE}"
 
 
 def enable_account_research_failure_demo(request: str) -> str:
-    """Arm both the enterprise branch and the rate-limit simulation."""
     return enable_ratelimit_trigger(enable_enterprise_account(request))
 
 
@@ -86,13 +67,10 @@ def _strip_directive(request: str, directive: str) -> tuple[str, bool]:
 
 
 def _extract_demo_directives(request: str) -> tuple[str, bool, bool]:
-    """Strip demo directives. Returns (cleaned_request, is_enterprise, trigger_ratelimit)."""
     request, is_enterprise = _strip_directive(request, ENTERPRISE_BRANCH_DIRECTIVE)
     request, trigger_ratelimit = _strip_directive(request, TRIGGER_RATELIMIT_DIRECTIVE)
     return request, is_enterprise, trigger_ratelimit
 
-
-# ── Request parsing helpers ────────────────────────────────────────────────────
 
 def _parse_company_name(request: str) -> str:
     patterns = [
@@ -126,9 +104,8 @@ def _detect_industry(request: str) -> str:
 def _detect_incumbent_count(request: str) -> int:
     match = re.search(r"\b(\w+)\s+incumbent", request, re.IGNORECASE)
     if match:
-        word = match.group(1).lower()
         mapping = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5}
-        return mapping.get(word, 2)
+        return mapping.get(match.group(1).lower(), 2)
     match = re.search(r"\b(\d)\s+incumbent", request, re.IGNORECASE)
     if match:
         return int(match.group(1))
@@ -136,17 +113,18 @@ def _detect_incumbent_count(request: str) -> int:
 
 
 def _detect_ae_email(request: str) -> str:
-    match = re.search(r"\b([a-z][a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,})\b", request, re.IGNORECASE)
+    match = re.search(
+        r"\b([a-z][a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,})\b",
+        request,
+        re.IGNORECASE,
+    )
     if match:
         return match.group(1)
     return "ae@amber-demo.example"
 
 
-# ── Deterministic @step() checkpoints ─────────────────────────────────────────
-
-@step()
+@step(name="normalize_account_request")
 def normalize_account_request(request: str) -> dict[str, Any]:
-    """Parse a loose pre-call research request into a structured account record."""
     company = _parse_company_name(request)
     industry = _detect_industry(request)
     incumbent_count = _detect_incumbent_count(request)
@@ -168,24 +146,22 @@ def normalize_account_request(request: str) -> dict[str, Any]:
     }
 
 
-@step()
+@step(name="determine_workflow_branch")
 def determine_workflow_branch(
     account: dict[str, Any],
     *,
     force_enterprise_branch: bool = False,
 ) -> str:
-    """Return 'enterprise' or 'standard' based on account signals."""
     if force_enterprise_branch or account.get("is_enterprise"):
         return "enterprise"
     return "standard"
 
 
-@step()
+@step(name="stage_outreach_payloads")
 def stage_outreach_payloads(
     account: dict[str, Any],
     findings: dict[str, str],
 ) -> dict[str, Any]:
-    """Assemble email and CRM activity payloads before committing external writes."""
     return {
         "email_payload": {
             "to": account["ae_email"],
@@ -202,19 +178,15 @@ def stage_outreach_payloads(
     }
 
 
-# ── @function_tool + @step() tools ────────────────────────────────────────────
-
 @function_tool
-@step()
+@step(name="record_research_decision")
 def record_research_decision(next_action: str, rationale: str) -> str:
-    """Record the planner's choice of next research module."""
     return _json({"next_action": next_action, "rationale": rationale})
 
 
 @function_tool
-@step()
+@step(name="lookup_crm_account")
 def lookup_crm_account(company: str, industry: str) -> str:
-    """Return the cached CRM account profile for the target company."""
     employee_count = 300 + _stable_int(company, "headcount", modulo=4700)
     arr_estimate = 500_000 + _stable_int(company, "arr", modulo=9_500_000)
     return _json({
@@ -230,9 +202,8 @@ def lookup_crm_account(company: str, industry: str) -> str:
 
 
 @function_tool
-@step()
+@step(name="fetch_pricing_signals")
 def fetch_pricing_signals(company: str, incumbent_count: int) -> str:
-    """Return pricing intelligence from the deal desk cache."""
     base_acv = 42_000 + _stable_int(company, "acv", modulo=78_000)
     discount_pct = 5 + _stable_int(company, "discount", modulo=18)
     return _json({
@@ -247,9 +218,8 @@ def fetch_pricing_signals(company: str, incumbent_count: int) -> str:
 
 
 @function_tool
-@step()
+@step(name="get_known_tech_stack")
 def get_known_tech_stack(company: str, industry: str) -> str:
-    """Return tech stack signals from the internal enrichment database."""
     stacks: dict[str, list[str]] = {
         "logistics": ["SAP TM", "Oracle WMS", "Salesforce", "Snowflake"],
         "healthcare": ["Epic", "Salesforce Health Cloud", "AWS", "Tableau"],
@@ -270,9 +240,8 @@ def get_known_tech_stack(company: str, industry: str) -> str:
 
 
 @function_tool
-@step()
+@step(name="search_recent_news")
 def search_recent_news(company: str, industry: str) -> str:
-    """Search for recent news about the target company."""
     query = f"{company} {industry} news 2026"
     with DDGS() as ddgs:
         results = list(ddgs.text(query, max_results=4))
@@ -286,9 +255,8 @@ def search_recent_news(company: str, industry: str) -> str:
 
 
 @function_tool
-@step()
+@step(name="search_competitor_positioning")
 def search_competitor_positioning(company: str, industry: str) -> str:
-    """Search for how competitors are positioning against this prospect."""
     query = f"{company} alternatives competitors {industry} 2026"
     with DDGS() as ddgs:
         results = list(ddgs.text(query, max_results=4))
@@ -302,9 +270,8 @@ def search_competitor_positioning(company: str, industry: str) -> str:
 
 
 @function_tool
-@step()
+@step(name="search_hiring_signals")
 def search_hiring_signals(company: str) -> str:
-    """Search for open roles to infer the company's strategic direction."""
     query = f"{company} jobs hiring 2026 site:linkedin.com OR site:greenhouse.io"
     with DDGS() as ddgs:
         results = list(ddgs.text(query, max_results=3))
@@ -324,33 +291,21 @@ _DEEP_SCAN_QUERIES = [
 
 
 @function_tool(failure_error_function=None)
-@step()
+@step(name="scrape_deep_competitive_signals")
 def scrape_deep_competitive_signals(company: str, industry: str) -> str:
-    """
-    Run five targeted DuckDuckGo queries to build a deep competitive signal pack.
-    This is the rare enterprise-account path.
-
-    When the workflow was started with the rate-limit directive, consecutive queries
-    that arrive faster than _RATELIMIT_THRESHOLD_SECONDS apart raise ConnectionError —
-    exactly what happens when scraping too aggressively without backoff.
-
-    Dashboard demo levers — uncomment to diagnose or fix:
-      Lever 1 (diagnostic): uncomment logger.info to see per-query traces in the dashboard.
-      Lever 2 (fix):        uncomment time.sleep to pace queries below the rate-limit threshold.
-    """
-    workflow_id = DBOS.workflow_id
+    workflow_id = current_workflow_id()
     signals: list[dict[str, Any]] = []
     last_query_time = time.monotonic()
 
     for i, query_template in enumerate(_DEEP_SCAN_QUERIES, start=1):
         query = query_template.format(company=company, industry=industry)
+        # NOTE: Uncomment the next line to add backoff between searches (Fork 2 — fix)
+        # time.sleep(1.5)
+
         elapsed = time.monotonic() - last_query_time
 
-        # NOTE: Uncomment the next line to enable per-query trace logging (Lever 1 — diagnostic)
+        # NOTE: Uncomment the next line to enable per-query trace logging (Fork 1 — diagnostic)
         # logger.info("[deep_scan %d/%d] Searching: %r — %.2fs since last search", i, len(_DEEP_SCAN_QUERIES), query, elapsed)
-
-        # NOTE: Uncomment the next line to add backoff between searches (Lever 2 — fix)
-        # time.sleep(1.5)
 
         if workflow_id in _ratelimit_workflows and i == 3 and elapsed < _RATELIMIT_THRESHOLD_SECONDS:
             raise ConnectionError("Remote end closed connection without response")
@@ -376,17 +331,13 @@ def scrape_deep_competitive_signals(company: str, industry: str) -> str:
 
 
 @function_tool(failure_error_function=None)
-@step()
+@step(name="send_account_brief_email")
 def send_account_brief_email(
     ae_email: str,
     company: str,
     brief_summary: str,
 ) -> str:
-    """
-    Send the compiled research brief to the AE. Irreversible external side effect —
-    in production this calls the email gateway; here it writes a durable receipt.
-    """
-    workflow_id = DBOS.workflow_id or "unknown-workflow"
+    workflow_id = current_workflow_id() or "unknown-workflow"
     OUTREACH_RECEIPT_DIR.mkdir(parents=True, exist_ok=True)
     receipt_path = OUTREACH_RECEIPT_DIR / f"{_workflow_file_key(workflow_id)}.json"
     receipt = {
@@ -405,8 +356,6 @@ def send_account_brief_email(
     )
     return _json(receipt)
 
-
-# ── Agents ─────────────────────────────────────────────────────────────────────
 
 research_planner = Agent(
     name="account_research_planner",
@@ -491,8 +440,6 @@ RESEARCH_MODULE_AGENTS: dict[str, Agent] = {
     "tech_stack_signals": tech_stack_analyst,
 }
 
-
-# ── Planner loop infrastructure ────────────────────────────────────────────────
 
 def _parse_json_object(value: str) -> dict[str, Any]:
     try:
@@ -600,7 +547,6 @@ async def _plan_next_module(
 
 
 async def _run_standard_research(account: dict[str, Any]) -> dict[str, str]:
-    """Run the three required research modules via planner loop with guardrail."""
     completed: set[str] = set()
     findings: dict[str, str] = {}
 
@@ -620,7 +566,6 @@ async def _run_standard_research(account: dict[str, Any]) -> dict[str, str]:
         if len(completed) == len(REQUIRED_RESEARCH_MODULES):
             break
 
-    # Guardrail: force any modules the planner skipped
     missing = [m for m in REQUIRED_RESEARCH_MODULES if m not in completed]
     for action in missing:
         logger.info("account-research-error-demo guardrail selected module: %s", action)
@@ -634,35 +579,22 @@ async def _run_standard_research(account: dict[str, Any]) -> dict[str, str]:
     return findings
 
 
-# ── Main registered workflow ───────────────────────────────────────────────────
-
 @register_agent(name="account-research-error-demo")
 async def account_research_error_demo(request: str) -> str:
-    # Extract demo directives — strips flags from the request string.
     request, is_enterprise, trigger_ratelimit = _extract_demo_directives(request)
 
-    # Register this workflow for rate-limit simulation directly in Python.
-    # Never passed through the LLM — tool parameters routed via agents are unreliable
-    # for boolean flags that the model wasn't explicitly instructed to preserve.
-    if trigger_ratelimit and DBOS.workflow_id:
-        _ratelimit_workflows.add(DBOS.workflow_id)
+    workflow_id = current_workflow_id()
+    if trigger_ratelimit and workflow_id:
+        _ratelimit_workflows.add(workflow_id)
 
-    # Step 1: parse the request into a structured account record
     account = normalize_account_request(request)
-
-    # Step 2: determine if this is a standard or enterprise workflow
     workflow_branch = determine_workflow_branch(
         account,
         force_enterprise_branch=is_enterprise,
     )
-
-    # Steps 3–N: run the three required research modules via planner loop
     findings = await _run_standard_research(account)
-
-    # Prepare staged payloads before any external writes
     staged_payloads = stage_outreach_payloads(account, findings)
 
-    # Compile the preliminary research brief from standard findings
     brief_result = await agent_runner(
         starting_agent=brief_compiler,
         input=(
@@ -673,9 +605,6 @@ async def account_research_error_demo(request: str) -> str:
     )
     compiled_brief = str(brief_result.final_output)
 
-    # Send the brief email — irreversible external side effect.
-    # This fires BEFORE the enterprise deep scan so that forking at the failing
-    # deep scan step replays this from the DBOS checkpoint — no duplicate send.
     outreach_result = await agent_runner(
         starting_agent=outreach_operator,
         input=(
@@ -687,9 +616,6 @@ async def account_research_error_demo(request: str) -> str:
         ),
     )
 
-    # Enterprise-only: deep competitive scan (the rare branch that can fail).
-    # simulate_ratelimit is passed from the directive so it's preserved on forks —
-    # meaning Fork 1 (logger only) still fails, and only Fork 2 (with sleep) succeeds.
     deep_scan_result = "Not required for standard accounts."
     if workflow_branch == "enterprise":
         logger.info(
@@ -707,7 +633,6 @@ async def account_research_error_demo(request: str) -> str:
         )
         deep_scan_result = str(deep_result.final_output)
 
-    # Final coordinator summary
     result = await agent_runner(
         starting_agent=research_coordinator,
         input=(
