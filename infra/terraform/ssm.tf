@@ -2,9 +2,9 @@
 # SSM Parameter Store — secrets the app needs at runtime
 # =============================================================================
 # Set these after apply:
-#   aws ssm put-parameter --name /aws-group-project/dev/openai-api-key \
+#   aws ssm put-parameter --name /amber/dev/openai-api-key \
 #       --value "sk-..." --type SecureString --overwrite
-#   aws ssm put-parameter --name /aws-group-project/dev/dbos-conductor-key \
+#   aws ssm put-parameter --name /amber/dev/dbos-conductor-key \
 #       --value "dbos..." --type SecureString --overwrite
 # =============================================================================
 

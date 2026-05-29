@@ -32,7 +32,6 @@ RUN uv sync --frozen --no-dev
 COPY sdk/                  sdk/
 COPY admin_control_plane/  admin_control_plane/
 COPY example_customer_app/ example_customer_app/
-COPY user_agents/          user_agents/
 
 # Prefix-stripping middleware for path-based ALB routing
 COPY infra/docker/strip_prefix.py strip_prefix.py
@@ -43,7 +42,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
     CMD curl -sf http://localhost:8003/health || exit 1
 
 ENV ASGI_APP=example_customer_app.main:app
-ENV PATH_PREFIX=/api
+ENV PATH_PREFIX=/api,/demo
 ENV PORT=8003
 
 CMD ["uv", "run", "python", "strip_prefix.py"]

@@ -131,13 +131,13 @@ terraform output -json
 
 # Restart ECS services (pick up new Docker images)
 aws ecs update-service \
-  --cluster aws-group-project-dev \
-  --service aws-group-project-dev-dashboard-api \
+  --cluster amber-dev \
+  --service amber-dev-dashboard-api \
   --force-new-deployment
 
 aws ecs update-service \
-  --cluster aws-group-project-dev \
-  --service aws-group-project-dev-customer-app \
+  --cluster amber-dev \
+  --service amber-dev-customer-app \
   --force-new-deployment
 
 # Invalidate CloudFront cache after frontend changes
@@ -150,7 +150,7 @@ aws cloudfront create-invalidation \
 
 ```bash
 # Empty the S3 bucket first (Terraform can't delete non-empty buckets)
-aws s3 rm s3://aws-group-project-dev-frontend --recursive
+aws s3 rm s3://amber-dev-frontend --recursive
 
 # Destroy all infrastructure
 cd infra/terraform
@@ -165,8 +165,8 @@ Secrets are stored in AWS and are NOT committed to the repo:
 
 | Secret | Location | Key/Name |
 |--------|----------|----------|
-| OpenAI API key | SSM Parameter Store | `/app/aws-group-project/dev/openai-api-key` |
-| DBOS Conductor key | SSM Parameter Store | `/app/aws-group-project/dev/dbos-conductor-key` |
-| Database connection URL | Secrets Manager | `aws-group-project-dev-db-url` |
+| OpenAI API key | SSM Parameter Store | `/app/amber/dev/openai-api-key` |
+| DBOS Conductor key | SSM Parameter Store | `/app/amber/dev/dbos-conductor-key` |
+| Database connection URL | Secrets Manager | `amber-dev-db-url` |
 
 ECS tasks fetch these at startup via IAM role permissions.

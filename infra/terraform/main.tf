@@ -23,7 +23,7 @@ terraform {
   # state stays local while you iterate.
   #
   # backend "s3" {
-  #   bucket = "aws-group-project-tfstate"
+  #   bucket = "amber-tfstate"
   #   key    = "terraform.tfstate"
   #   region = "us-east-1"
   # }

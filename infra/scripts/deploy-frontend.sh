@@ -14,7 +14,7 @@
 set -euo pipefail
 
 REGION="${AWS_REGION:-us-east-1}"
-BUCKET="aws-group-project-dev-frontend"
+BUCKET="amber-dev-frontend"
 DIST_ID=""  # set after first terraform apply: grep for cloudfront_domain in outputs
 
 echo "==> Installing dashboard dependencies..."

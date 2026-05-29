@@ -19,18 +19,23 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
   signing_protocol                  = "sigv4"
 }
 
-# --- S3 bucket policy: public read for website hosting ---
+# --- S3 bucket policy: allow CloudFront OAC to read objects ---
 
 data "aws_iam_policy_document" "frontend_bucket_policy" {
   statement {
-    sid    = "PublicReadGetObject"
+    sid    = "AllowCloudFrontOAC"
     effect = "Allow"
     principals {
-      type        = "*"
-      identifiers = ["*"]
+      type        = "Service"
+      identifiers = ["cloudfront.amazonaws.com"]
     }
     actions   = ["s3:GetObject"]
     resources = ["${aws_s3_bucket.frontend.arn}/*"]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceArn"
+      values   = [aws_cloudfront_distribution.main.arn]
+    }
   }
 }
 
@@ -42,21 +47,16 @@ resource "aws_s3_bucket_policy" "frontend" {
 # --- Distribution ---
 
 resource "aws_cloudfront_distribution" "main" {
-  enabled         = true
-  is_ipv6_enabled = true
-  price_class     = "PriceClass_100" # US, Canada, Europe — cheapest tier
+  enabled             = true
+  is_ipv6_enabled     = true
+  price_class         = "PriceClass_100" # US, Canada, Europe — cheapest tier
+  default_root_object = "index.html"
 
-  # Default origin: S3 website endpoint (frontend static files)
+  # Default origin: S3 bucket (frontend static files, served via CloudFront OAC)
   origin {
-    domain_name = "${aws_s3_bucket.frontend.id}.s3-website-${var.region}.amazonaws.com"
-    origin_id   = "s3"
-
-    custom_origin_config {
-      http_port              = 80
-      https_port             = 443
-      origin_protocol_policy = "http-only"
-      origin_ssl_protocols   = ["TLSv1.2"]
-    }
+    domain_name              = aws_s3_bucket.frontend.bucket_regional_domain_name
+    origin_id                = "s3"
+    origin_access_control_id = aws_cloudfront_origin_access_control.frontend.id
   }
 
   # ALB origin (API + dashboard backend)
@@ -80,6 +80,26 @@ resource "aws_cloudfront_distribution" "main" {
   # /api/* → ALB → customer-app
   ordered_cache_behavior {
     path_pattern           = "/api/*"
+    target_origin_id       = "alb"
+    viewer_protocol_policy = "redirect-to-https"
+    allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods         = ["GET", "HEAD", "OPTIONS"]
+
+    forwarded_values {
+      query_string = true
+      headers      = ["Host", "Authorization", "Accept", "Content-Type"]
+
+      cookies { forward = "all" }
+    }
+
+    min_ttl = 0
+    default_ttl = 0
+    max_ttl = 0
+  }
+
+  # /demo/* → ALB → customer-app (demo frontend + agent API)
+  ordered_cache_behavior {
+    path_pattern           = "/demo/*"
     target_origin_id       = "alb"
     viewer_protocol_policy = "redirect-to-https"
     allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
