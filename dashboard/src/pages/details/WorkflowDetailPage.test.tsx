@@ -1,15 +1,18 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { Route, Routes } from 'react-router-dom'
 import { setPricing } from '../../lib/pricingStore'
 import { makeDetail, makeStep, makeWorkflow } from '../../test/fixtures'
 import { renderWithRoute } from '../../test/render'
+import { WorkflowListPage } from '../list/WorkflowListPage'
 import { WorkflowDetailPage } from './WorkflowDetailPage'
 
 const apiMocks = vi.hoisted(() => ({
   fetchWorkflowDetail: vi.fn(),
   resumeWorkflow: vi.fn(),
   cancelWorkflow: vi.fn(),
+  forkWorkflow: vi.fn(),
 }))
 
 const contextMocks = vi.hoisted(() => ({
@@ -78,7 +81,7 @@ describe('WorkflowDetailPage', () => {
     expect(screen.getByText('timeout')).toBeInTheDocument()
   })
 
-  it('shows red row downtime while stale pending data cannot refresh and closes it after recovery', async () => {
+  it('keeps pending rows visible without red downtime overlays while stale data cannot refresh', async () => {
     const now = vi.spyOn(Date, 'now').mockReturnValue(6_000)
     const firstStep = makeStep({
       step_id: 1,
@@ -116,8 +119,8 @@ describe('WorkflowDetailPage', () => {
 
     expect(screen.getByText('Failed to refresh. Showing last known data.')).toBeInTheDocument()
     expect(screen.getAllByTestId('step-gantt-bar')).toHaveLength(2)
-    expect(screen.getAllByTestId('downtime-gantt-bar')).toHaveLength(1)
-    expect(screen.getByTestId('downtime-gantt-bar')).toHaveClass('bg-red-500/85')
+    expect(screen.queryByTestId('downtime-gantt-bar')).not.toBeInTheDocument()
+    expect(screen.getByText('running…')).toBeInTheDocument()
 
     now.mockReturnValue(9_000)
     await act(async () => {
@@ -130,7 +133,7 @@ describe('WorkflowDetailPage', () => {
     expect(contextMocks.setDetail).toHaveBeenCalledWith('wf-1', recoveredDetail)
   })
 
-  it('shows red row downtime for an errored workflow', async () => {
+  it('shows a red step bar for an errored workflow', async () => {
     contextMocks.workflowDetails = {
       'wf-1': makeDetail({
         workflow: {
@@ -153,8 +156,43 @@ describe('WorkflowDetailPage', () => {
 
     renderDetailPage()
 
-    expect(screen.getByTestId('downtime-gantt-bar')).toHaveClass('bg-red-500/85')
+    expect(screen.getByTestId('step-gantt-bar')).toHaveClass('bg-red-500/80')
     expect(screen.queryByText('running…')).not.toBeInTheDocument()
+  })
+
+  it('shows the sticky step error summary and opens the clicked errored step', async () => {
+    contextMocks.workflowDetails = {
+      'wf-1': makeDetail({
+        workflow: {
+          workflow_id: 'wf-1',
+          status: 'PENDING',
+        },
+        steps: [
+          makeStep({
+            step_id: 1,
+            status: 'SUCCESS',
+            function_name: 'completed_step',
+          }),
+          makeStep({
+            step_id: 2,
+            status: 'ERROR',
+            function_name: 'failed_step',
+            error_message: 'Validation failed',
+          }),
+        ],
+      }),
+    }
+    apiMocks.fetchWorkflowDetail.mockResolvedValue(contextMocks.workflowDetails['wf-1'])
+
+    renderDetailPage()
+
+    const summary = screen.getByRole('button', { name: /step errors: 1/i })
+    expect(summary).toHaveClass('text-red-200')
+
+    await userEvent.click(summary)
+    await userEvent.click(screen.getByRole('button', { name: /step #2/i }))
+
+    expect(screen.getByText('Validation failed')).toBeInTheDocument()
   })
 
   it('shows the waiting state and manual refresh for pending workflows with no steps', () => {
@@ -217,5 +255,27 @@ describe('WorkflowDetailPage', () => {
     })
 
     expect(apiMocks.fetchWorkflowDetail).toHaveBeenCalledTimes(1)
+  })
+
+  it('navigates to the workflows list page instead of history back', async () => {
+    contextMocks.workflowDetails = {
+      'wf-1': makeDetail({ workflow: { workflow_id: 'wf-1', status: 'SUCCESS' } }),
+    }
+    apiMocks.fetchWorkflowDetail.mockResolvedValue(contextMocks.workflowDetails['wf-1'])
+
+    renderWithRoute(
+      <Routes>
+        <Route path="/" element={<WorkflowListPage />} />
+        <Route path="/workflows/:id" element={<WorkflowDetailPage />} />
+      </Routes>,
+      {
+        route: '/workflows/wf-1',
+        path: '*',
+      },
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: /workflows/i }))
+
+    expect(await screen.findByPlaceholderText('Search by name or ID...')).toBeInTheDocument()
   })
 })

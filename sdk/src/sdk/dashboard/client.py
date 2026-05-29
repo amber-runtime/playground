@@ -20,6 +20,7 @@ def _wf_to_dict(
         "created_at": workflow.created_at,
         "updated_at": workflow.updated_at,
         "recovery_attempts": getattr(workflow, "recovery_attempts", None),
+        "forked_from": getattr(workflow, "forked_from", None),
     }
     if include_output:
         output = getattr(workflow, "output", None)
@@ -150,3 +151,17 @@ class DashboardClient:
     async def cancel_workflow(self, workflow_id: str) -> dict[str, str | bool]:
         await self._client.cancel_workflow_async(workflow_id)
         return {"workflow_id": workflow_id, "action": "cancel", "accepted": True}
+
+    async def fork_workflow(
+        self,
+        workflow_id: str,
+        start_step: int,
+    ) -> dict[str, str | int | bool]:
+        handle = await self._client.fork_workflow_async(workflow_id, start_step)
+        return {
+            "workflow_id": workflow_id,
+            "forked_workflow_id": handle.get_workflow_id(),
+            "start_step": start_step,
+            "action": "fork",
+            "accepted": True,
+        }

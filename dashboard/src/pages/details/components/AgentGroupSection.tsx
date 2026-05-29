@@ -14,6 +14,7 @@ interface Props {
   workflowStart: number
   workflowEnd: number
   workflowIsActive: boolean
+  visualActiveStepId: number | null
   downtimeIntervals: DowntimeInterval[]
   groupIndex: number
   nowMs: number
@@ -63,6 +64,7 @@ export function AgentGroupSection({
   workflowStart,
   workflowEnd,
   workflowIsActive,
+  visualActiveStepId,
   downtimeIntervals,
   groupIndex,
   nowMs,
@@ -77,8 +79,6 @@ export function AgentGroupSection({
   }, [containsSelected, onExpandChange])
 
   const isAgent = group.agentName !== null
-  const hasUnfinished = group.steps.some((s) => s.completed_at_epoch_ms == null)
-  const hasRunning = workflowIsActive && hasUnfinished
   const borderClass = isAgent
     ? 'border-l-[3px] border-l-sky-600/50'
     : 'border-l-2 border-l-slate-600'
@@ -101,11 +101,7 @@ export function AgentGroupSection({
           <span className="text-xs text-slate-500">
             {group.steps.length} step{group.steps.length !== 1 ? 's' : ''}
           </span>
-          {hasRunning ? (
-            <span className="text-xs text-amber-400 font-medium">running…</span>
-          ) : hasUnfinished ? (
-            <span className="text-xs text-red-300 font-medium">stalled</span>
-          ) : group.totalDurationMs != null ? (
+          {group.totalDurationMs != null ? (
             <span className="text-xs text-slate-500 font-mono">
               {formatDuration(group.totalDurationMs)}
             </span>
@@ -133,6 +129,7 @@ export function AgentGroupSection({
                 workflowStart={workflowStart}
                 workflowEnd={workflowEnd}
                 workflowIsActive={workflowIsActive}
+                visualActiveStepId={visualActiveStepId}
                 downtimeIntervals={rowDowntimeIntervals}
                 nowMs={nowMs}
               />

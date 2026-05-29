@@ -6,10 +6,13 @@ import { fetchWorkflowDetail } from '../../lib/api'
 import type { SelectedStepId } from '../../lib/types'
 import type { DowntimeInterval } from '../../lib/stepHelpers'
 import { deriveWorkflowDisplayStatus } from '../../lib/stepHelpers'
+import { ForkSuccessModal } from './components/ForkSuccessModal'
 import { WorkflowHeader } from './components/WorkflowHeader'
 import { StepList } from './components/StepList'
+import { StepErrorSummaryCard } from './components/right/StepErrorSummaryCard'
 import { StepDetailPanel } from './components/right/StepDetailPanel'
 import { WorkflowDefaultPanel } from './components/right/WorkflowDefaultPanel'
+import { showToast } from '../../shared/Toast'
 
 const DETAIL_POLL_DELAY_MS = 2000
 
@@ -30,6 +33,7 @@ export function WorkflowDetailPage() {
   const data = id ? workflowDetails[id] : null
   const [selectedStepId, setSelectedStepId] = useState<SelectedStepId>(null)
   const [fetchError, setFetchError] = useState<string | null>(null)
+  const [forkedWorkflowId, setForkedWorkflowId] = useState<string | null>(null)
   const [activeRefreshDowntimeStart, setActiveRefreshDowntimeStart] = useState<number | null>(null)
   const [resolvedRefreshDowntimes, setResolvedRefreshDowntimes] = useState<DowntimeInterval[]>([])
   const loadPromiseRef = useRef<Promise<void> | null>(null)
@@ -53,6 +57,10 @@ export function WorkflowDetailPage() {
 
   const handleStepClick = (stepId: number) => {
     setSelectedStepId((prev) => (prev === stepId ? null : stepId))
+  }
+
+  const handleSelectStep = (stepId: number) => {
+    setSelectedStepId(stepId)
   }
 
   const loadDetail = useCallback(async (): Promise<void> => {
@@ -113,7 +121,7 @@ export function WorkflowDetailPage() {
   const BackNav = () => (
     <div className="bg-slate-900 border-b border-slate-800 px-6 py-2">
       <button
-        onClick={() => navigate(-1)}
+        onClick={() => navigate('/')}
         className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-200 transition-colors"
       >
         <ArrowLeft size={14} />
@@ -154,6 +162,17 @@ export function WorkflowDetailPage() {
   }
 
   const displayStatus = deriveWorkflowDisplayStatus(data.workflow, data.steps)
+  const handleForkSuccess = (newWorkflowId: string) => {
+    setForkedWorkflowId(newWorkflowId)
+    showToast('Workflow forked', newWorkflowId)
+  }
+  const handleCloseForkModal = () => {
+    setForkedWorkflowId(null)
+  }
+  const handleViewForkedWorkflow = (newWorkflowId: string) => {
+    setForkedWorkflowId(null)
+    navigate(`/workflows/${encodeURIComponent(newWorkflowId)}`)
+  }
 
   return (
     <div className="min-h-screen bg-slate-950">
@@ -207,16 +226,30 @@ export function WorkflowDetailPage() {
                   />
                 )}
               </div>
-              <aside className="col-span-2 sticky top-0 h-screen overflow-y-auto bg-slate-900 border border-slate-800 rounded-lg">
-                {selectedStep != null ? (
-                  <StepDetailPanel step={selectedStep} />
-                ) : (
-                  <WorkflowDefaultPanel
-                    workflow={data.workflow}
+              <div className="col-span-2 sticky top-0 h-screen flex flex-col gap-3">
+                <aside className="min-h-0 flex-1 overflow-y-auto bg-slate-900 border border-slate-800 rounded-lg">
+                  {selectedStep != null ? (
+                    <StepDetailPanel
+                      workflowId={data.workflow.workflow_id}
+                      step={selectedStep}
+                      steps={data.steps}
+                      onForkSuccess={handleForkSuccess}
+                    />
+                  ) : (
+                    <WorkflowDefaultPanel
+                      workflow={data.workflow}
+                      steps={data.steps}
+                    />
+                  )}
+                </aside>
+                <div className="shrink-0">
+                  <StepErrorSummaryCard
                     steps={data.steps}
+                    selectedStepId={selectedStepId}
+                    onSelectStep={handleSelectStep}
                   />
-                )}
-              </aside>
+                </div>
+              </div>
             </div>
           )
         })()}
@@ -232,6 +265,14 @@ export function WorkflowDetailPage() {
             Refresh now
           </button>
         </div>
+      )}
+
+      {forkedWorkflowId != null && (
+        <ForkSuccessModal
+          workflowId={forkedWorkflowId}
+          onClose={handleCloseForkModal}
+          onViewWorkflow={handleViewForkedWorkflow}
+        />
       )}
     </div>
   )

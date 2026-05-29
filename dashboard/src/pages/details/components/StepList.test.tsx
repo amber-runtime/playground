@@ -30,7 +30,7 @@ function renderStepList({
 }
 
 describe('StepList downtime row anchoring', () => {
-  it('renders pending-stall downtime on the stopped row only', () => {
+  it('does not render pending-stall overlays for long-running pending workflows', () => {
     vi.spyOn(Date, 'now').mockReturnValue(10_000)
 
     renderStepList({
@@ -53,14 +53,11 @@ describe('StepList downtime row anchoring', () => {
     })
 
     expect(screen.getAllByTestId('step-gantt-bar')).toHaveLength(2)
-    expect(screen.getAllByTestId('downtime-gantt-bar')).toHaveLength(1)
-    expect(screen.getByTestId('downtime-gantt-bar').closest('button')).toHaveAttribute(
-      'title',
-      expect.stringContaining('Stopped Step'),
-    )
+    expect(screen.queryByTestId('downtime-gantt-bar')).not.toBeInTheDocument()
+    expect(screen.getByText('running…')).toBeInTheDocument()
   })
 
-  it('keeps resolved downtime on its original anchor when newer rows exist', () => {
+  it('does not render refresh downtime overlays when newer rows exist', () => {
     renderStepList({
       workflow: makeWorkflow({
         status: 'SUCCESS',
@@ -101,10 +98,42 @@ describe('StepList downtime row anchoring', () => {
     })
 
     expect(screen.getAllByTestId('step-gantt-bar')).toHaveLength(3)
-    expect(screen.getAllByTestId('downtime-gantt-bar')).toHaveLength(1)
-    expect(screen.getByTestId('downtime-gantt-bar').closest('button')).toHaveAttribute(
-      'title',
-      expect.stringContaining('Crashed Step'),
-    )
+    expect(screen.queryByTestId('downtime-gantt-bar')).not.toBeInTheDocument()
+  })
+
+  it('rebases old inherited fork history so current running steps stay visible', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(12_000)
+
+    renderStepList({
+      workflow: makeWorkflow({
+        workflow_id: 'wf-forked',
+        status: 'PENDING',
+        created_at: 10_000,
+        updated_at: 10_000,
+        forked_from: 'wf-source',
+      }),
+      steps: [
+        makeStep({
+          step_id: 1,
+          function_name: 'old_step',
+          started_at_epoch_ms: 1_000,
+          completed_at_epoch_ms: 2_000,
+        }),
+        makeStep({
+          step_id: 2,
+          function_name: 'current_step',
+          started_at_epoch_ms: 11_000,
+          completed_at_epoch_ms: null,
+          display_completed_at_epoch_ms: undefined as unknown as null,
+          duration_ms: null,
+          display_duration_ms: undefined as unknown as null,
+        }),
+      ],
+    })
+
+    const bars = screen.getAllByTestId('step-gantt-bar')
+    expect(bars[0]).toHaveStyle({ left: '0%', width: '33.33333333333333%' })
+    expect(bars[1]).toHaveStyle({ left: '66.66666666666666%', width: '33.33333333333333%' })
+    expect(screen.getByText('running…')).toBeInTheDocument()
   })
 })

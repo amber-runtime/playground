@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import {
   Brain,
   Clock,
+  GitFork,
+  Loader2,
   Search,
   Wrench,
   CheckCircle2,
@@ -9,6 +11,7 @@ import {
 } from 'lucide-react'
 import type { Step } from '../../../../lib/types'
 import {
+  canForkFromStep,
   formatDuration,
   formatTimestamp,
   getStepKind,
@@ -17,6 +20,8 @@ import {
   stepDurationMs,
   stepStartedAtMs,
 } from '../../../../lib/stepHelpers'
+import { forkWorkflow } from '../../../../lib/api'
+import { showToast } from '../../../../shared/Toast'
 import { Section } from './Section'
 import { JsonBlock } from './JsonBlock'
 import { LLMMessagesBlock } from './LLMMessagesBlock'
@@ -24,7 +29,10 @@ import { OutputRenderer } from './OutputRenderer'
 import { DefList } from './DefList'
 
 interface Props {
+  workflowId: string
   step: Step
+  steps: Step[]
+  onForkSuccess?: (forkedWorkflowId: string) => void
 }
 
 type StepKind = ReturnType<typeof getStepKind>
@@ -68,8 +76,9 @@ function SectionLabel({ children }: { children: string }) {
   )
 }
 
-export function StepDetailPanel({ step }: Props) {
+export function StepDetailPanel({ workflowId, step, steps, onForkSuccess }: Props) {
   const [now, setNow] = useState(Date.now())
+  const [forkPending, setForkPending] = useState(false)
   const kind = getStepKind(step)
   const humanName = step.event_type === 'tool_call'
     ? humanizeStepName(step.tool_name ?? step.function_name)
@@ -100,6 +109,23 @@ export function StepDetailPanel({ step }: Props) {
   const llmHasIO = kind === 'llm' && (step.llm_input != null || step.llm_output != null)
   const llmHasTokens =
     kind === 'llm' && (step.tokens_in != null || step.tokens_out != null)
+  const canFork = canForkFromStep(steps, step.step_id)
+
+  const handleFork = async () => {
+    if (!canFork || forkPending || step.step_id == null) return
+    setForkPending(true)
+    try {
+      const result = await forkWorkflow(workflowId, step.step_id)
+      onForkSuccess?.(result.forkedWorkflowId)
+    } catch (err) {
+      showToast(
+        'Fork failed',
+        err instanceof Error ? err.message : 'Unknown error',
+      )
+    } finally {
+      setForkPending(false)
+    }
+  }
 
   return (
     <div>
@@ -117,6 +143,27 @@ export function StepDetailPanel({ step }: Props) {
           {step.function_name && step.function_name !== humanName && (
             <span className="truncate">{step.function_name}</span>
           )}
+        </div>
+        <div className="mt-3">
+          {/* Fork button */}
+          <button
+            type="button"
+            onClick={() => void handleFork()}
+            disabled={!canFork || forkPending}
+            title={
+              canFork
+                ? 'Creates a new workflow from this step and runs it. This workflow stays unchanged.'
+                : 'Fork requires a complete attempted step history through this step.'
+            }
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold border-2 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 ${
+              !canFork || forkPending
+                ? 'border-slate-800 text-slate-600 bg-slate-900 cursor-not-allowed opacity-60 shadow-none'
+                : 'border-slate-500 text-slate-50 bg-slate-800 shadow-black/30 hover:bg-slate-700 hover:border-slate-300'
+            }`}
+          >
+            {forkPending ? <Loader2 size={13} className="animate-spin" /> : <GitFork size={13} />}
+            Fork as New Run
+          </button>
         </div>
       </div>
 

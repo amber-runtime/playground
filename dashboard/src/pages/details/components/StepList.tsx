@@ -8,13 +8,12 @@ import type {
 } from '../../../lib/types'
 import type { DowntimeInterval } from '../../../lib/stepHelpers'
 import {
+  buildTimelineSteps,
   computeWorkflowWindow,
-  errorDowntimeInterval,
+  deriveVisualActiveStepId,
   filterStepsBySearch,
   groupStepsByAgent,
   isWorkflowActivelyRunning,
-  pendingStallDowntimeInterval,
-  recoveryDowntimeInterval,
 } from '../../../lib/stepHelpers'
 import { AgentGroupSection } from './AgentGroupSection'
 import { StepListToolbar } from './StepListToolbar'
@@ -51,7 +50,8 @@ export function StepList({
   selectedStepId,
   onStepClick,
 }: Props) {
-  const groups = useMemo(() => groupStepsByAgent(steps), [steps])
+  const timelineSteps = useMemo(() => buildTimelineSteps(workflow, steps), [workflow, steps])
+  const groups = useMemo(() => groupStepsByAgent(timelineSteps), [timelineSteps])
   const [nowMs, setNowMs] = useState(() => Date.now())
   const refreshAnchorByStartRef = useRef(new Map<number, string>())
 
@@ -82,8 +82,8 @@ export function StepList({
   }, [groups])
 
   const matchingStepIds = useMemo(
-    () => filterStepsBySearch(steps, searchQuery),
-    [steps, searchQuery],
+    () => filterStepsBySearch(timelineSteps, searchQuery),
+    [timelineSteps, searchQuery],
   )
   const searching = searchQuery.trim() !== ''
 
@@ -124,19 +124,6 @@ export function StepList({
 
   const derivedDowntimeIntervals = useMemo(() => {
     const intervals: DowntimeInterval[] = []
-    const recovery = recoveryDowntimeInterval(workflow, steps)
-    if (recovery != null) intervals.push(recovery)
-    const error = errorDowntimeInterval(
-      { ...workflow, status: effectiveStatus },
-      steps,
-    )
-    if (error != null) intervals.push(error)
-    const pendingStall = pendingStallDowntimeInterval(
-      { ...workflow, status: effectiveStatus },
-      steps,
-      nowMs,
-    )
-    if (pendingStall != null) intervals.push(pendingStall)
     intervals.push(
       ...resolvedRefreshDowntimes.map((interval) => ({
         ...interval,
@@ -158,10 +145,6 @@ export function StepList({
     }
     return intervals
   }, [
-    workflow,
-    effectiveStatus,
-    steps,
-    nowMs,
     resolvedRefreshDowntimes,
     activeRefreshDowntimeStart,
     lastVisibleStepKey,
@@ -181,13 +164,17 @@ export function StepList({
   const window = useMemo(
     () => computeWorkflowWindow(
       { ...workflow, status: effectiveStatus },
-      steps,
+      timelineSteps,
       hasActiveDowntime ? nowMs : null,
     ),
-    [workflow, effectiveStatus, steps, hasActiveDowntime, nowMs],
+    [workflow, effectiveStatus, timelineSteps, hasActiveDowntime, nowMs],
   )
   const workflowIsActive =
     !hasActiveDowntime && isWorkflowActivelyRunning(effectiveStatus)
+  const visualActiveStepId = useMemo(
+    () => deriveVisualActiveStepId(effectiveStatus, timelineSteps),
+    [effectiveStatus, timelineSteps],
+  )
 
   const handleExpandAll = useCallback(() => {
     setExpansion(() => {
@@ -233,7 +220,7 @@ export function StepList({
         onCollapseAll={handleCollapseAll}
       />
 
-      {steps.length > 1 && <TimeAxis start={window.start} end={window.end} />}
+      {timelineSteps.length > 1 && <TimeAxis start={window.start} end={window.end} />}
 
       {renderedGroups.length === 0 ? (
         <div className="bg-slate-900 border border-slate-800 rounded-lg px-5 py-8 text-center">
@@ -259,6 +246,7 @@ export function StepList({
                 workflowStart={window.start}
                 workflowEnd={window.end}
                 workflowIsActive={workflowIsActive}
+                visualActiveStepId={visualActiveStepId}
                 downtimeIntervals={derivedDowntimeIntervals}
                 groupIndex={i}
                 nowMs={nowMs}

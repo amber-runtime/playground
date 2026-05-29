@@ -134,6 +134,7 @@ class DashboardClientTests(unittest.IsolatedAsyncioTestCase):
                 "status": "SUCCESS",
                 "created_at": 1,
                 "updated_at": 2,
+                "forked_from": None,
                 "output": None,
                 "recovery_attempts": None,
             }
@@ -165,6 +166,7 @@ class DashboardClientTests(unittest.IsolatedAsyncioTestCase):
                 "status": "SUCCESS",
                 "created_at": 1,
                 "updated_at": 2,
+                "forked_from": None,
                 "output": None,
                 "recovery_attempts": None,
             },
@@ -197,6 +199,28 @@ class DashboardClientTests(unittest.IsolatedAsyncioTestCase):
             result, {"workflow_id": "wf-1", "action": "cancel", "accepted": True}
         )
         client._client.cancel_workflow_async.assert_awaited_once_with("wf-1")
+
+    async def test_fork_workflow_returns_action_payload(self):
+        client = DashboardClient.__new__(DashboardClient)
+        client._db_url = "postgresql://db"
+        client._client = mock.Mock()
+        handle = mock.Mock()
+        handle.get_workflow_id.return_value = "wf-2"
+        client._client.fork_workflow_async = mock.AsyncMock(return_value=handle)
+
+        result = await client.fork_workflow("wf-1", 7)
+
+        self.assertEqual(
+            result,
+            {
+                "workflow_id": "wf-1",
+                "forked_workflow_id": "wf-2",
+                "start_step": 7,
+                "action": "fork",
+                "accepted": True,
+            },
+        )
+        client._client.fork_workflow_async.assert_awaited_once_with("wf-1", 7)
 
 
 class QueueDrainReporterTests(unittest.IsolatedAsyncioTestCase):
