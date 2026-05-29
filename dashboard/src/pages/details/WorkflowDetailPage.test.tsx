@@ -81,7 +81,7 @@ describe('WorkflowDetailPage', () => {
     expect(screen.getByText('timeout')).toBeInTheDocument()
   })
 
-  it('shows red row downtime while stale pending data cannot refresh and closes it after recovery', async () => {
+  it('keeps pending rows visible without red downtime overlays while stale data cannot refresh', async () => {
     const now = vi.spyOn(Date, 'now').mockReturnValue(6_000)
     const firstStep = makeStep({
       step_id: 1,
@@ -119,8 +119,8 @@ describe('WorkflowDetailPage', () => {
 
     expect(screen.getByText('Failed to refresh. Showing last known data.')).toBeInTheDocument()
     expect(screen.getAllByTestId('step-gantt-bar')).toHaveLength(2)
-    expect(screen.getAllByTestId('downtime-gantt-bar')).toHaveLength(1)
-    expect(screen.getByTestId('downtime-gantt-bar')).toHaveClass('bg-red-500/85')
+    expect(screen.queryByTestId('downtime-gantt-bar')).not.toBeInTheDocument()
+    expect(screen.getByText('running…')).toBeInTheDocument()
 
     now.mockReturnValue(9_000)
     await act(async () => {
@@ -133,7 +133,7 @@ describe('WorkflowDetailPage', () => {
     expect(contextMocks.setDetail).toHaveBeenCalledWith('wf-1', recoveredDetail)
   })
 
-  it('shows red row downtime for an errored workflow', async () => {
+  it('shows a red step bar for an errored workflow', async () => {
     contextMocks.workflowDetails = {
       'wf-1': makeDetail({
         workflow: {
@@ -156,7 +156,7 @@ describe('WorkflowDetailPage', () => {
 
     renderDetailPage()
 
-    expect(screen.getByTestId('downtime-gantt-bar')).toHaveClass('bg-red-500/85')
+    expect(screen.getByTestId('step-gantt-bar')).toHaveClass('bg-red-500/80')
     expect(screen.queryByText('running…')).not.toBeInTheDocument()
   })
 

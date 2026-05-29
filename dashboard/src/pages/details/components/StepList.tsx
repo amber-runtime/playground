@@ -11,12 +11,9 @@ import {
   buildTimelineSteps,
   computeWorkflowWindow,
   deriveVisualActiveStepId,
-  errorDowntimeInterval,
   filterStepsBySearch,
   groupStepsByAgent,
   isWorkflowActivelyRunning,
-  pendingStallDowntimeInterval,
-  recoveryDowntimeInterval,
 } from '../../../lib/stepHelpers'
 import { AgentGroupSection } from './AgentGroupSection'
 import { StepListToolbar } from './StepListToolbar'
@@ -127,19 +124,6 @@ export function StepList({
 
   const derivedDowntimeIntervals = useMemo(() => {
     const intervals: DowntimeInterval[] = []
-    const recovery = recoveryDowntimeInterval(workflow, steps)
-    if (recovery != null) intervals.push(recovery)
-    const error = errorDowntimeInterval(
-      { ...workflow, status: effectiveStatus },
-      steps,
-    )
-    if (error != null) intervals.push(error)
-    const pendingStall = pendingStallDowntimeInterval(
-      { ...workflow, status: effectiveStatus },
-      steps,
-      nowMs,
-    )
-    if (pendingStall != null) intervals.push(pendingStall)
     intervals.push(
       ...resolvedRefreshDowntimes.map((interval) => ({
         ...interval,
@@ -161,10 +145,6 @@ export function StepList({
     }
     return intervals
   }, [
-    workflow,
-    effectiveStatus,
-    steps,
-    nowMs,
     resolvedRefreshDowntimes,
     activeRefreshDowntimeStart,
     lastVisibleStepKey,

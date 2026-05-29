@@ -8,7 +8,6 @@ import {
 import type { Step } from '../../../lib/types'
 import type { DowntimeInterval } from '../../../lib/stepHelpers'
 import {
-  computeDowntimeBarGeometry,
   computeStepBarGeometry,
   formatDuration,
   getStepKind,
@@ -56,14 +55,14 @@ function StatusDot({
     )
   }
   if (stepCompletedAtMs(step) == null)
-    return <span className="inline-flex h-3 w-3 shrink-0 rounded-full bg-red-500/80" />
+    return <span className="inline-flex h-3 w-3 shrink-0 rounded-full bg-amber-500/80" />
   return <CheckCircle2 size={13} className="text-emerald-400 shrink-0" />
 }
 
 function barColorClass(step: Step, visuallyRunning: boolean): string {
   if (step.status === 'ERROR') return 'bg-red-500/80'
   if (visuallyRunning) return 'bg-amber-500/70'
-  if (stepCompletedAtMs(step) == null) return 'bg-red-500/70'
+  if (stepCompletedAtMs(step) == null) return 'bg-amber-500/70'
   return 'bg-emerald-500/70'
 }
 
@@ -85,35 +84,25 @@ function StepBar({
   nowMs: number
 }) {
   const hasTiming = stepTimelineStartedAtMs(step) != null
+  const hasError = step.status === 'ERROR'
   const visuallyRunning = workflowIsActive && step.step_id === visualActiveStepId
   const geom = hasTiming
     ? computeStepBarGeometry(step, workflowStart, workflowEnd)
     : null
-  const downtimeGeometries = downtimeIntervals
-    .map((interval) =>
-      computeDowntimeBarGeometry(interval, workflowStart, workflowEnd, nowMs),
-    )
-    .filter((g): g is NonNullable<typeof g> => g != null)
   return (
-    <div className="relative h-3 rounded-sm bg-slate-800/60 overflow-hidden">
-      {geom != null && (
+    <div
+      data-testid="step-gantt-track"
+      className={`relative h-3 rounded-sm overflow-hidden ${
+        hasError ? 'bg-red-500/80' : 'bg-slate-800/60'
+      }`}
+    >
+      {!hasError && geom != null && (
         <span
           data-testid="step-gantt-bar"
           className={`absolute top-0 h-full min-w-[2px] rounded-sm ${barColorClass(step, visuallyRunning)}`}
           style={{ left: `${geom.leftPct}%`, width: `${geom.widthPct}%` }}
         />
       )}
-      {downtimeGeometries.map((downtimeGeom, i) => (
-        <span
-          key={`${downtimeGeom.leftPct}-${downtimeGeom.widthPct}-${i}`}
-          data-testid="downtime-gantt-bar"
-          className="absolute top-0 h-full min-w-[2px] rounded-sm bg-red-500/85"
-          style={{
-            left: `${downtimeGeom.leftPct}%`,
-            width: `${downtimeGeom.widthPct}%`,
-          }}
-        />
-      ))}
     </div>
   )
 }
@@ -132,6 +121,7 @@ export function StepRow({
   const stepId = step.step_id
   const kind = getStepKind(step)
   const hasError = step.status === 'ERROR'
+  const isIncomplete = stepCompletedAtMs(step) == null
   const visuallyRunning = workflowIsActive && stepId === visualActiveStepId
   const dur = stepDurationMs(step)
 
@@ -149,7 +139,7 @@ export function StepRow({
     ? 'text-slate-500'
     : 'text-slate-200'
 
-  const tooltip = `${name}${dur != null ? ` · ${formatDuration(dur)}` : visuallyRunning ? ' · in progress' : ' · stalled'}`
+  const tooltip = `${name}${dur != null ? ` · ${formatDuration(dur)}` : isIncomplete ? ' · in progress' : ' · —'}`
 
   return (
     <button
@@ -181,11 +171,11 @@ export function StepRow({
       <span className="text-[11px] font-mono text-slate-500 tabular-nums text-right shrink-0">
         {kind === 'sleep' && dur != null
           ? formatDuration(dur)
-          : visuallyRunning
+          : isIncomplete
           ? 'running…'
           : dur != null
           ? formatDuration(dur)
-          : 'stalled'}
+          : '—'}
       </span>
     </button>
   )

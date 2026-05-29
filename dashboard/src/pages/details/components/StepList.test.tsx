@@ -30,7 +30,7 @@ function renderStepList({
 }
 
 describe('StepList downtime row anchoring', () => {
-  it('renders pending-stall downtime on the stopped row only', () => {
+  it('does not render pending-stall overlays for long-running pending workflows', () => {
     vi.spyOn(Date, 'now').mockReturnValue(10_000)
 
     renderStepList({
@@ -53,14 +53,11 @@ describe('StepList downtime row anchoring', () => {
     })
 
     expect(screen.getAllByTestId('step-gantt-bar')).toHaveLength(2)
-    expect(screen.getAllByTestId('downtime-gantt-bar')).toHaveLength(1)
-    expect(screen.getByTestId('downtime-gantt-bar').closest('button')).toHaveAttribute(
-      'title',
-      expect.stringContaining('Stopped Step'),
-    )
+    expect(screen.queryByTestId('downtime-gantt-bar')).not.toBeInTheDocument()
+    expect(screen.getByText('running…')).toBeInTheDocument()
   })
 
-  it('keeps resolved downtime on its original anchor when newer rows exist', () => {
+  it('does not render refresh downtime overlays when newer rows exist', () => {
     renderStepList({
       workflow: makeWorkflow({
         status: 'SUCCESS',
@@ -101,11 +98,7 @@ describe('StepList downtime row anchoring', () => {
     })
 
     expect(screen.getAllByTestId('step-gantt-bar')).toHaveLength(3)
-    expect(screen.getAllByTestId('downtime-gantt-bar')).toHaveLength(1)
-    expect(screen.getByTestId('downtime-gantt-bar').closest('button')).toHaveAttribute(
-      'title',
-      expect.stringContaining('Crashed Step'),
-    )
+    expect(screen.queryByTestId('downtime-gantt-bar')).not.toBeInTheDocument()
   })
 
   it('rebases old inherited fork history so current running steps stay visible', () => {
