@@ -11,10 +11,13 @@ from ddgs import DDGS
 
 from sdk import agent_runner, current_workflow_id, logger, register_agent, step
 
-
 BRIEF_CLOCK = datetime(2026, 6, 4, 9, 0, tzinfo=timezone.utc)
 MAX_RESEARCH_STEPS = 5
-REQUIRED_RESEARCH_MODULES = ("news_research", "market_positioning", "tech_stack_signals")
+REQUIRED_RESEARCH_MODULES = (
+    "news_research",
+    "market_positioning",
+    "tech_stack_signals",
+)
 
 ENTERPRISE_BRANCH_DIRECTIVE = "[demo:enterprise_account]"
 TRIGGER_RATELIMIT_DIRECTIVE = "[demo:trigger_ratelimit]"
@@ -94,11 +97,16 @@ def _parse_company_name(request: str) -> str:
 
 def _detect_industry(request: str) -> str:
     lowered = request.lower()
-    if any(w in lowered for w in ("logistics", "freight", "supply chain", "shipping", "transport")):
+    if any(
+        w in lowered
+        for w in ("logistics", "freight", "supply chain", "shipping", "transport")
+    ):
         return "logistics"
     if any(w in lowered for w in ("health", "hospital", "payer", "pharma", "hipaa")):
         return "healthcare"
-    if any(w in lowered for w in ("bank", "fintech", "finance", "insurance", "pci", "sox")):
+    if any(
+        w in lowered for w in ("bank", "fintech", "finance", "insurance", "pci", "sox")
+    ):
         return "financial_services"
     if any(w in lowered for w in ("retail", "ecommerce", "e-commerce", "consumer")):
         return "retail"
@@ -193,16 +201,18 @@ def record_research_decision(next_action: str, rationale: str) -> str:
 def lookup_crm_account(company: str, industry: str) -> str:
     employee_count = 300 + _stable_int(company, "headcount", modulo=4700)
     arr_estimate = 500_000 + _stable_int(company, "arr", modulo=9_500_000)
-    return _json({
-        "company": company,
-        "industry": industry,
-        "employee_count": employee_count,
-        "estimated_arr_usd": arr_estimate,
-        "crm_stage": "active_opportunity",
-        "last_touch_date": "2026-05-12",
-        "primary_contact": f"VP Operations — {company}",
-        "source": "salesforce_cache",
-    })
+    return _json(
+        {
+            "company": company,
+            "industry": industry,
+            "employee_count": employee_count,
+            "estimated_arr_usd": arr_estimate,
+            "crm_stage": "active_opportunity",
+            "last_touch_date": "2026-05-12",
+            "primary_contact": f"VP Operations — {company}",
+            "source": "salesforce_cache",
+        }
+    )
 
 
 @function_tool
@@ -210,15 +220,17 @@ def lookup_crm_account(company: str, industry: str) -> str:
 def fetch_pricing_signals(company: str, incumbent_count: int) -> str:
     base_acv = 42_000 + _stable_int(company, "acv", modulo=78_000)
     discount_pct = 5 + _stable_int(company, "discount", modulo=18)
-    return _json({
-        "company": company,
-        "estimated_acv_usd": base_acv,
-        "typical_discount_pct": discount_pct,
-        "competitor_price_range": f"${base_acv - 10_000:,}–${base_acv + 20_000:,}",
-        "incumbent_count": incumbent_count,
-        "price_sensitivity": "high" if incumbent_count >= 2 else "medium",
-        "source": "deal_desk_cache",
-    })
+    return _json(
+        {
+            "company": company,
+            "estimated_acv_usd": base_acv,
+            "typical_discount_pct": discount_pct,
+            "competitor_price_range": f"${base_acv - 10_000:,}–${base_acv + 20_000:,}",
+            "incumbent_count": incumbent_count,
+            "price_sensitivity": "high" if incumbent_count >= 2 else "medium",
+            "source": "deal_desk_cache",
+        }
+    )
 
 
 @function_tool
@@ -234,13 +246,15 @@ def get_known_tech_stack(company: str, industry: str) -> str:
     tools = stacks.get(industry, stacks["software"])
     seed = _stable_int(company, industry, modulo=len(tools))
     rotated = tools[seed:] + tools[:seed]
-    return _json({
-        "company": company,
-        "known_tools": rotated,
-        "api_maturity": "high" if seed > 1 else "medium",
-        "cloud_provider": rotated[-1] if rotated else "unknown",
-        "source": "enrichment_db",
-    })
+    return _json(
+        {
+            "company": company,
+            "known_tools": rotated,
+            "api_maturity": "high" if seed > 1 else "medium",
+            "cloud_provider": rotated[-1] if rotated else "unknown",
+            "source": "enrichment_db",
+        }
+    )
 
 
 @function_tool
@@ -304,34 +318,50 @@ def scrape_deep_competitive_signals(company: str, industry: str) -> str:
     for i, query_template in enumerate(_DEEP_SCAN_QUERIES, start=1):
         query = query_template.format(company=company, industry=industry)
         # DEMO FORK 2: Uncomment the next line to add backoff so the deep scan succeeds.
-        # time.sleep(1.5)
+        time.sleep(1.5)
 
         elapsed = time.monotonic() - last_query_time
 
         # DEMO FORK 1: Uncomment the next line to reveal the real failure cause in logs.
-        # i == 3 and elapsed < _RATELIMIT_THRESHOLD_SECONDS and logger.warning("DuckDuckGo deep scan throttled on query %d/%d for %s: %.2fs since last search is below the %.2fs safety threshold; likely scraper rate limit", i, len(_DEEP_SCAN_QUERIES), company, elapsed, _RATELIMIT_THRESHOLD_SECONDS)
+        if i == 3 and elapsed < _RATELIMIT_THRESHOLD_SECONDS:
+            logger.warning(
+                "DuckDuckGo deep scan throttled on query %d/%d for %s: %.2fs since last search is below the %.2fs safety threshold; likely scraper rate limit",
+                i,
+                len(_DEEP_SCAN_QUERIES),
+                company,
+                elapsed,
+                _RATELIMIT_THRESHOLD_SECONDS,
+            )
 
-        if workflow_id in _ratelimit_workflows and i == 3 and elapsed < _RATELIMIT_THRESHOLD_SECONDS:
+        if (
+            workflow_id in _ratelimit_workflows
+            and i == 3
+            and elapsed < _RATELIMIT_THRESHOLD_SECONDS
+        ):
             raise DeepScanThrottleError("Remote end closed connection without response")
 
         with DDGS() as ddgs:
             results = list(ddgs.text(query, max_results=3))
 
         last_query_time = time.monotonic()
-        signals.append({
-            "query_index": i,
-            "query": query,
-            "result_count": len(results),
-            "top_result": results[0]["body"][:250] if results else None,
-        })
+        signals.append(
+            {
+                "query_index": i,
+                "query": query,
+                "result_count": len(results),
+                "top_result": results[0]["body"][:250] if results else None,
+            }
+        )
 
-    return _json({
-        "company": company,
-        "industry": industry,
-        "query_count": len(_DEEP_SCAN_QUERIES),
-        "signals": signals,
-        "source": "ddgs_deep_scan",
-    })
+    return _json(
+        {
+            "company": company,
+            "industry": industry,
+            "query_count": len(_DEEP_SCAN_QUERIES),
+            "signals": signals,
+            "source": "ddgs_deep_scan",
+        }
+    )
 
 
 @function_tool(failure_error_function=None)
@@ -499,7 +529,11 @@ def choose_guarded_module_action(raw_action: str, completed: set[str]) -> str:
     action = aliases.get(action, action)
 
     if action == "final":
-        return "final" if len(completed) == len(REQUIRED_RESEARCH_MODULES) else _first_missing_module(completed)
+        return (
+            "final"
+            if len(completed) == len(REQUIRED_RESEARCH_MODULES)
+            else _first_missing_module(completed)
+        )
     if action not in REQUIRED_RESEARCH_MODULES:
         return _first_missing_module(completed)
     if action in completed:
@@ -507,7 +541,9 @@ def choose_guarded_module_action(raw_action: str, completed: set[str]) -> str:
     return action
 
 
-def _module_prompt(action: str, account: dict[str, Any], findings: dict[str, str]) -> str:
+def _module_prompt(
+    action: str, account: dict[str, Any], findings: dict[str, str]
+) -> str:
     common = f"Account:\n{_json(account)}"
     if action == "news_research":
         return (
