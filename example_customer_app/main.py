@@ -8,6 +8,7 @@ Run worker in another terminal:
   uv run python -m sdk.worker example_customer_app.main:agent_runtime
 """
 
+import logging
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -106,6 +107,76 @@ KNOWN_AGENT_CAPABILITIES = {
     },
 }
 TRAVEL_AGENT_NAME = "travel-concierge"
+_ACCOUNT_RESEARCH_DEMO_ERROR_TEXT = (
+    "Error running tool scrape_deep_competitive_signals: "
+    "Remote end closed connection without response"
+)
+
+
+def _is_account_research_demo_exception(exc: object) -> bool:
+    return _ACCOUNT_RESEARCH_DEMO_ERROR_TEXT in str(exc)
+
+
+class _SuppressAccountResearchDemoTraceback(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        if not record.exc_info:
+            return True
+
+        exc_type, exc, _tb = record.exc_info
+        if exc_type is None or exc is None:
+            return True
+
+        if (
+            record.getMessage().startswith("Exception encountered in asynchronous workflow")
+            and _is_account_research_demo_exception(exc)
+        ):
+            return False
+
+        return True
+
+
+class _SuppressAccountResearchDemoAsyncioNoise(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        message = record.getMessage()
+        if not message.startswith("Future exception was never retrieved"):
+            return True
+
+        if _ACCOUNT_RESEARCH_DEMO_ERROR_TEXT in message:
+            return False
+
+        if record.exc_info and record.exc_info[1] and _is_account_research_demo_exception(record.exc_info[1]):
+            return False
+
+        return True
+
+
+def _install_account_research_demo_log_filter() -> None:
+    traceback_filter = _SuppressAccountResearchDemoTraceback()
+    asyncio_filter = _SuppressAccountResearchDemoAsyncioNoise()
+
+    dbos_logger = logging.getLogger("dbos")
+    if not getattr(dbos_logger, "_account_research_demo_filter_installed", False):
+        dbos_logger.addFilter(traceback_filter)
+        dbos_logger._account_research_demo_filter_installed = True
+
+    asyncio_logger = logging.getLogger("asyncio")
+    if not getattr(asyncio_logger, "_account_research_demo_filter_installed", False):
+        asyncio_logger.addFilter(asyncio_filter)
+        asyncio_logger._account_research_demo_filter_installed = True
+
+    root_logger = logging.getLogger()
+    if not getattr(root_logger, "_account_research_demo_filter_installed", False):
+        for handler in root_logger.handlers:
+            handler.addFilter(traceback_filter)
+            handler.addFilter(asyncio_filter)
+        root_logger._account_research_demo_filter_installed = True
+
+
+def _install_account_research_demo_exception_suppression() -> None:
+    _install_account_research_demo_log_filter()
+
+
+_install_account_research_demo_exception_suppression()
 
 
 def _humanize_agent_name(name: str) -> str:
@@ -159,6 +230,7 @@ def _arm_account_research_ratelimit_input(run_input: str) -> str:
 
 
 agent_runtime = AgentRuntime()
+
 
 app = FastAPI(
     title="Customer App with Checkpoint SDK",

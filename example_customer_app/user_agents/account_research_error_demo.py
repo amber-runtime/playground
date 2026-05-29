@@ -31,6 +31,10 @@ SAMPLE_INPUT = (
 )
 
 
+class DeepScanThrottleError(ConnectionError):
+    pass
+
+
 def _stable_int(*parts: str, modulo: int = 1000) -> int:
     digest = hashlib.sha256("|".join(parts).encode("utf-8")).hexdigest()
     return int(digest[:12], 16) % modulo
@@ -299,16 +303,16 @@ def scrape_deep_competitive_signals(company: str, industry: str) -> str:
 
     for i, query_template in enumerate(_DEEP_SCAN_QUERIES, start=1):
         query = query_template.format(company=company, industry=industry)
-        # NOTE: Uncomment the next line to add backoff between searches (Fork 2 — fix)
+        # DEMO FORK 2: Uncomment the next line to add backoff so the deep scan succeeds.
         # time.sleep(1.5)
 
         elapsed = time.monotonic() - last_query_time
 
-        # NOTE: Uncomment the next line to enable per-query trace logging (Fork 1 — diagnostic)
-        # logger.info("[deep_scan %d/%d] Searching: %r — %.2fs since last search", i, len(_DEEP_SCAN_QUERIES), query, elapsed)
+        # DEMO FORK 1: Uncomment the next line to reveal the real failure cause in logs.
+        # i == 3 and elapsed < _RATELIMIT_THRESHOLD_SECONDS and logger.warning("DuckDuckGo deep scan throttled on query %d/%d for %s: %.2fs since last search is below the %.2fs safety threshold; likely scraper rate limit", i, len(_DEEP_SCAN_QUERIES), company, elapsed, _RATELIMIT_THRESHOLD_SECONDS)
 
         if workflow_id in _ratelimit_workflows and i == 3 and elapsed < _RATELIMIT_THRESHOLD_SECONDS:
-            raise ConnectionError("Remote end closed connection without response")
+            raise DeepScanThrottleError("Remote end closed connection without response")
 
         with DDGS() as ddgs:
             results = list(ddgs.text(query, max_results=3))
