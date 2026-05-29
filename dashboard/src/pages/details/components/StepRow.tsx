@@ -25,6 +25,7 @@ interface Props {
   workflowStart: number
   workflowEnd: number
   workflowIsActive: boolean
+  visualActiveStepId: number | null
   downtimeIntervals: DowntimeInterval[]
   nowMs: number
 }
@@ -71,6 +72,7 @@ function StepBar({
   workflowStart,
   workflowEnd,
   workflowIsActive,
+  visualActiveStepId,
   downtimeIntervals,
   nowMs,
 }: {
@@ -78,11 +80,12 @@ function StepBar({
   workflowStart: number
   workflowEnd: number
   workflowIsActive: boolean
+  visualActiveStepId: number | null
   downtimeIntervals: DowntimeInterval[]
   nowMs: number
 }) {
   const hasTiming = stepTimelineStartedAtMs(step) != null
-  const visuallyRunning = workflowIsActive && stepCompletedAtMs(step) == null
+  const visuallyRunning = workflowIsActive && step.step_id === visualActiveStepId
   const geom = hasTiming
     ? computeStepBarGeometry(step, workflowStart, workflowEnd)
     : null
@@ -122,14 +125,14 @@ export function StepRow({
   workflowStart,
   workflowEnd,
   workflowIsActive,
+  visualActiveStepId,
   downtimeIntervals,
   nowMs,
 }: Props) {
   const stepId = step.step_id
   const kind = getStepKind(step)
   const hasError = step.status === 'ERROR'
-  const unfinished = stepCompletedAtMs(step) == null
-  const visuallyRunning = workflowIsActive && unfinished
+  const visuallyRunning = workflowIsActive && stepId === visualActiveStepId
   const dur = stepDurationMs(step)
 
   const name = step.event_type === 'tool_call'
@@ -169,6 +172,7 @@ export function StepRow({
         workflowStart={workflowStart}
         workflowEnd={workflowEnd}
         workflowIsActive={workflowIsActive}
+        visualActiveStepId={visualActiveStepId}
         downtimeIntervals={downtimeIntervals}
         nowMs={nowMs}
       />

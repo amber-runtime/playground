@@ -8,6 +8,7 @@ import {
   computeCostBreakdown,
   countLlmCalls,
   countToolCalls,
+  deriveVisualActiveStepId,
   errorDowntimeInterval,
   findLargestRecoveryGap,
   formatCost,
@@ -155,6 +156,34 @@ describe('stepHelpers', () => {
     expect(isWorkflowActivelyRunning('ERROR')).toBe(false)
     expect(isWorkflowActivelyRunning('CANCELLED')).toBe(false)
     expect(isWorkflowActivelyRunning('MAX_RECOVERY_ATTEMPTS_EXCEEDED')).toBe(false)
+  })
+
+  it('derives a visual active step from the newest pending step state', () => {
+    expect(
+      deriveVisualActiveStepId('SUCCESS', [
+        makeStep({ step_id: 1 }),
+      ]),
+    ).toBeNull()
+
+    expect(
+      deriveVisualActiveStepId('PENDING', [
+        makeStep({ step_id: 1 }),
+        makeStep({
+          step_id: 2,
+          completed_at_epoch_ms: null,
+          display_completed_at_epoch_ms: undefined as unknown as null,
+          duration_ms: null,
+          display_duration_ms: undefined as unknown as null,
+        }),
+      ]),
+    ).toBe(2)
+
+    expect(
+      deriveVisualActiveStepId('PENDING', [
+        makeStep({ step_id: 1 }),
+        makeStep({ step_id: 2 }),
+      ]),
+    ).toBe(2)
   })
 
   it('uses a live duration clock for pending workflows', () => {

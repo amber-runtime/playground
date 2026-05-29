@@ -10,6 +10,7 @@ import type { DowntimeInterval } from '../../../lib/stepHelpers'
 import {
   buildTimelineSteps,
   computeWorkflowWindow,
+  deriveVisualActiveStepId,
   errorDowntimeInterval,
   filterStepsBySearch,
   groupStepsByAgent,
@@ -190,6 +191,10 @@ export function StepList({
   )
   const workflowIsActive =
     !hasActiveDowntime && isWorkflowActivelyRunning(effectiveStatus)
+  const visualActiveStepId = useMemo(
+    () => deriveVisualActiveStepId(effectiveStatus, timelineSteps),
+    [effectiveStatus, timelineSteps],
+  )
 
   const handleExpandAll = useCallback(() => {
     setExpansion(() => {
@@ -261,6 +266,7 @@ export function StepList({
                 workflowStart={window.start}
                 workflowEnd={window.end}
                 workflowIsActive={workflowIsActive}
+                visualActiveStepId={visualActiveStepId}
                 downtimeIntervals={derivedDowntimeIntervals}
                 groupIndex={i}
                 nowMs={nowMs}

@@ -224,6 +224,25 @@ export function buildTimelineSteps(workflow: WorkflowInfo, steps: Step[]): Step[
   })
 }
 
+export function deriveVisualActiveStepId(
+  workflowStatus: WorkflowStatus,
+  steps: Step[],
+): number | null {
+  if (workflowStatus !== 'PENDING') return null
+
+  for (let index = steps.length - 1; index >= 0; index--) {
+    const step = steps[index]
+    if (step.step_id != null && stepCompletedAtMs(step) == null) return step.step_id
+  }
+
+  for (let index = steps.length - 1; index >= 0; index--) {
+    const step = steps[index]
+    if (step.step_id != null) return step.step_id
+  }
+
+  return null
+}
+
 export function groupStepsByAgent(steps: Step[]): AgentGroup[] {
   if (steps.length === 0) return []
 
