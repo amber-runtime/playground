@@ -1,9 +1,11 @@
 import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { setPricing } from '../../lib/pricingStore'
 import { makeDetail, makeStep, makeWorkflow } from '../../test/fixtures'
 import { renderWithRoute } from '../../test/render'
+import { WorkflowListPage } from '../list/WorkflowListPage'
 import { WorkflowDetailPage } from './WorkflowDetailPage'
 
 const apiMocks = vi.hoisted(() => ({
@@ -217,5 +219,27 @@ describe('WorkflowDetailPage', () => {
     })
 
     expect(apiMocks.fetchWorkflowDetail).toHaveBeenCalledTimes(1)
+  })
+
+  it('navigates to the workflows list page instead of history back', async () => {
+    contextMocks.workflowDetails = {
+      'wf-1': makeDetail({ workflow: { workflow_id: 'wf-1', status: 'SUCCESS' } }),
+    }
+    apiMocks.fetchWorkflowDetail.mockResolvedValue(contextMocks.workflowDetails['wf-1'])
+
+    renderWithRoute(
+      <Routes>
+        <Route path="/" element={<WorkflowListPage />} />
+        <Route path="/workflows/:id" element={<WorkflowDetailPage />} />
+      </Routes>,
+      {
+        route: '/workflows/wf-1',
+        path: '*',
+      },
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: /workflows/i }))
+
+    expect(await screen.findByPlaceholderText('Search by name or ID...')).toBeInTheDocument()
   })
 })

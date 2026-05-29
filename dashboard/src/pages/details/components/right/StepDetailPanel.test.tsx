@@ -7,6 +7,7 @@ describe('StepDetailPanel', () => {
   it('renders LLM I/O and token details', () => {
     render(
       <StepDetailPanel
+        workflowId="wf-test"
         step={makeStep({
           llm_input: [{ role: 'user', content: 'Plan a launch' }],
           llm_output: [{ role: 'assistant', content: 'Launch plan ready' }],
@@ -32,6 +33,7 @@ describe('StepDetailPanel', () => {
   it('renders tool call arguments and result', () => {
     render(
       <StepDetailPanel
+        workflowId="wf-test"
         step={makeStep({
           event_type: 'tool_call',
           function_name: 'search_web',
@@ -54,6 +56,7 @@ describe('StepDetailPanel', () => {
   it('renders explicit error messages and fallback error copy', () => {
     const { rerender } = render(
       <StepDetailPanel
+        workflowId="wf-test"
         step={makeStep({
           status: 'ERROR',
           error_message: 'Validation failed',
@@ -66,6 +69,7 @@ describe('StepDetailPanel', () => {
 
     rerender(
       <StepDetailPanel
+        workflowId="wf-test"
         step={makeStep({
           status: 'ERROR',
           error_message: null,
@@ -84,6 +88,7 @@ describe('StepDetailPanel', () => {
 
     render(
       <StepDetailPanel
+        workflowId="wf-test"
         step={makeStep({
           function_name: 'DBOS.sleep',
           event_type: 'step',

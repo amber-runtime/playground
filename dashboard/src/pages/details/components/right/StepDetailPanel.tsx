@@ -143,19 +143,24 @@ export function StepDetailPanel({ workflowId, step, onForkSuccess }: Props) {
           )}
         </div>
         <div className="mt-3">
+          {/* Fork button */}
           <button
             type="button"
             onClick={() => void handleFork()}
             disabled={!canFork || forkPending}
-            title={canFork ? 'Fork from this step' : 'Fork requires a step ID'}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+            title={
+              canFork
+                ? 'Creates a new workflow from this step and runs it. This workflow stays unchanged.'
+                : 'Fork requires a step ID'
+            }
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold border-2 shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300/70 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 ${
               !canFork || forkPending
-                ? 'border-slate-800 text-slate-600 bg-slate-900 cursor-not-allowed opacity-60'
-                : 'border-slate-700 text-slate-200 bg-slate-800 hover:bg-slate-700'
+                ? 'border-slate-800 text-slate-600 bg-slate-900 cursor-not-allowed opacity-60 shadow-none'
+                : 'border-slate-500 text-slate-50 bg-slate-800 shadow-black/30 hover:bg-slate-700 hover:border-slate-300'
             }`}
           >
             {forkPending ? <Loader2 size={13} className="animate-spin" /> : <GitFork size={13} />}
-            Fork from here
+            Fork as New Run
           </button>
         </div>
       </div>
