@@ -160,6 +160,41 @@ describe('WorkflowDetailPage', () => {
     expect(screen.queryByText('running…')).not.toBeInTheDocument()
   })
 
+  it('shows the sticky step error summary and opens the clicked errored step', async () => {
+    contextMocks.workflowDetails = {
+      'wf-1': makeDetail({
+        workflow: {
+          workflow_id: 'wf-1',
+          status: 'PENDING',
+        },
+        steps: [
+          makeStep({
+            step_id: 1,
+            status: 'SUCCESS',
+            function_name: 'completed_step',
+          }),
+          makeStep({
+            step_id: 2,
+            status: 'ERROR',
+            function_name: 'failed_step',
+            error_message: 'Validation failed',
+          }),
+        ],
+      }),
+    }
+    apiMocks.fetchWorkflowDetail.mockResolvedValue(contextMocks.workflowDetails['wf-1'])
+
+    renderDetailPage()
+
+    const summary = screen.getByRole('button', { name: /step errors: 1/i })
+    expect(summary).toHaveClass('text-red-200')
+
+    await userEvent.click(summary)
+    await userEvent.click(screen.getByRole('button', { name: /step #2/i }))
+
+    expect(screen.getByText('Validation failed')).toBeInTheDocument()
+  })
+
   it('shows the waiting state and manual refresh for pending workflows with no steps', () => {
     contextMocks.workflowDetails = {
       'wf-1': makeDetail({

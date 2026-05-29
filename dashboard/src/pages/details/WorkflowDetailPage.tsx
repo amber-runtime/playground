@@ -9,6 +9,7 @@ import { deriveWorkflowDisplayStatus } from '../../lib/stepHelpers'
 import { ForkSuccessModal } from './components/ForkSuccessModal'
 import { WorkflowHeader } from './components/WorkflowHeader'
 import { StepList } from './components/StepList'
+import { StepErrorSummaryCard } from './components/right/StepErrorSummaryCard'
 import { StepDetailPanel } from './components/right/StepDetailPanel'
 import { WorkflowDefaultPanel } from './components/right/WorkflowDefaultPanel'
 import { showToast } from '../../shared/Toast'
@@ -56,6 +57,10 @@ export function WorkflowDetailPage() {
 
   const handleStepClick = (stepId: number) => {
     setSelectedStepId((prev) => (prev === stepId ? null : stepId))
+  }
+
+  const handleSelectStep = (stepId: number) => {
+    setSelectedStepId(stepId)
   }
 
   const loadDetail = useCallback(async (): Promise<void> => {
@@ -221,21 +226,30 @@ export function WorkflowDetailPage() {
                   />
                 )}
               </div>
-              <aside className="col-span-2 sticky top-0 h-screen overflow-y-auto bg-slate-900 border border-slate-800 rounded-lg">
-                {selectedStep != null ? (
-                  <StepDetailPanel
-                    workflowId={data.workflow.workflow_id}
-                    step={selectedStep}
+              <div className="col-span-2 sticky top-0 h-screen flex flex-col gap-3">
+                <aside className="min-h-0 flex-1 overflow-y-auto bg-slate-900 border border-slate-800 rounded-lg">
+                  {selectedStep != null ? (
+                    <StepDetailPanel
+                      workflowId={data.workflow.workflow_id}
+                      step={selectedStep}
+                      steps={data.steps}
+                      onForkSuccess={handleForkSuccess}
+                    />
+                  ) : (
+                    <WorkflowDefaultPanel
+                      workflow={data.workflow}
+                      steps={data.steps}
+                    />
+                  )}
+                </aside>
+                <div className="shrink-0">
+                  <StepErrorSummaryCard
                     steps={data.steps}
-                    onForkSuccess={handleForkSuccess}
+                    selectedStepId={selectedStepId}
+                    onSelectStep={handleSelectStep}
                   />
-                ) : (
-                  <WorkflowDefaultPanel
-                    workflow={data.workflow}
-                    steps={data.steps}
-                  />
-                )}
-              </aside>
+                </div>
+              </div>
             </div>
           )
         })()}
