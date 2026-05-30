@@ -57,6 +57,11 @@ output "cloudfront_domain" {
   value       = aws_cloudfront_distribution.main.domain_name
 }
 
+output "cloudfront_distribution_id" {
+  description = "CloudFront distribution ID for cache invalidations"
+  value       = aws_cloudfront_distribution.main.id
+}
+
 # --- ECR ---
 output "ecr_dashboard_api_url" {
   description = "ECR repo URL for dashboard-api image"
@@ -66,4 +71,30 @@ output "ecr_dashboard_api_url" {
 output "ecr_customer_app_url" {
   description = "ECR repo URL for customer-app image"
   value       = aws_ecr_repository.customer_app.repository_url
+}
+
+output "ecr_customer_worker_url" {
+  description = "ECR repo URL for customer-worker image"
+  value       = aws_ecr_repository.customer_worker.repository_url
+}
+
+# --- ECS ---
+output "ecs_cluster_name" {
+  description = "ECS cluster name"
+  value       = aws_ecs_cluster.main.name
+}
+
+output "dashboard_api_service_name" {
+  description = "ECS service name for dashboard-api"
+  value       = aws_ecs_service.dashboard_api.name
+}
+
+output "customer_app_service_name" {
+  description = "ECS service name for customer-app"
+  value       = aws_ecs_service.customer_app.name
+}
+
+output "customer_worker_service_name" {
+  description = "ECS service name for customer-worker"
+  value       = aws_ecs_service.customer_worker.name
 }

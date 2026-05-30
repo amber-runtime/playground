@@ -19,6 +19,10 @@ cd "$(git rev-parse --show-toplevel)"
 
 echo "==> Working in: $(pwd)"
 
+terraform_output() {
+  terraform -chdir="$TF_DIR" output -raw "$1"
+}
+
 # ── Terraform ─────────────────────────────────────────────────────────────────
 
 echo "==> Initializing Terraform..."
@@ -43,17 +47,18 @@ case "$ACTION" in
     bash infra/scripts/build-push.sh all
 
     echo "==> Restarting ECS services..."
+    CLUSTER="$(terraform_output ecs_cluster_name)"
     aws ecs update-service \
-      --cluster amber-dev \
-      --service amber-dev-dashboard-api \
+      --cluster "$CLUSTER" \
+      --service "$(terraform_output dashboard_api_service_name)" \
       --force-new-deployment --no-cli-pager
     aws ecs update-service \
-      --cluster amber-dev \
-      --service amber-dev-customer-app \
+      --cluster "$CLUSTER" \
+      --service "$(terraform_output customer_app_service_name)" \
       --force-new-deployment --no-cli-pager
     aws ecs update-service \
-      --cluster amber-dev \
-      --service amber-dev-customer-worker \
+      --cluster "$CLUSTER" \
+      --service "$(terraform_output customer_worker_service_name)" \
       --force-new-deployment --no-cli-pager
 
     echo "==> Deploying frontend..."
