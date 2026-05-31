@@ -62,6 +62,11 @@ resource "aws_db_proxy" "main" {
     secret_arn  = aws_secretsmanager_secret.db_credentials.arn
   }
 
+  depends_on = [
+    aws_iam_role_policy_attachment.rds_proxy_secrets,
+    aws_secretsmanager_secret_version.db_credentials,
+  ]
+
   tags = { Name = "${var.project_name}-${var.environment}-rds-proxy" }
 }
 

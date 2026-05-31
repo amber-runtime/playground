@@ -14,7 +14,7 @@ resource "aws_secretsmanager_secret" "db" {
 
 resource "aws_secretsmanager_secret_version" "db" {
   secret_id     = aws_secretsmanager_secret.db.id
-  secret_string = "postgresql://${var.db_username}:${local.db_password}@${aws_db_proxy.main.endpoint}:${module.rds.db_instance_port}/${var.db_name}"
+  secret_string = "postgresql://${urlencode(var.db_username)}:${urlencode(local.db_password)}@${aws_db_proxy.main.endpoint}:${module.rds.db_instance_port}/${var.db_name}"
 }
 
 resource "aws_secretsmanager_secret" "db_credentials" {
