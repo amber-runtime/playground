@@ -75,6 +75,13 @@ resource "aws_cloudfront_distribution" "main" {
       name  = "X-Forwarded-Host"
       value = aws_lb.main.dns_name
     }
+
+    # Shared secret the ALB listener checks before forwarding. Keeps direct
+    # hits to the ALB (or other CloudFront distributions) out of the backend.
+    custom_header {
+      name  = "X-Origin-Verify"
+      value = random_password.origin_verify.result
+    }
   }
 
   # /api/* → ALB → customer-app

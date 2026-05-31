@@ -58,18 +58,12 @@ resource "aws_security_group" "rds_proxy" {
 }
 
 # --- Dashboard API Security Group ---
+# Inbound is granted narrowly by aws_security_group_rule.alb_to_dashboard_api
+# (source = ALB SG) in alb.tf, so no broad VPC-CIDR ingress here.
 resource "aws_security_group" "dashboard_api" {
   name        = "${var.project_name}-${var.environment}-dashboard-api"
   description = "Dashboard API - read-only workflow viewer"
   vpc_id      = module.vpc.vpc_id
-
-  ingress {
-    description = "HTTP from ALB"
-    from_port   = 8001
-    to_port     = 8001
-    protocol    = "tcp"
-    cidr_blocks = [var.vpc_cidr]
-  }
 
   egress {
     description = "Outbound internet (NAT)"
@@ -83,18 +77,12 @@ resource "aws_security_group" "dashboard_api" {
 }
 
 # --- Customer App Security Group ---
+# Inbound is granted narrowly by aws_security_group_rule.alb_to_customer_app
+# (source = ALB SG) in alb.tf, so no broad VPC-CIDR ingress here.
 resource "aws_security_group" "customer_app" {
   name        = "${var.project_name}-${var.environment}-customer-app"
   description = "Customer App - agent runtime"
   vpc_id      = module.vpc.vpc_id
-
-  ingress {
-    description = "HTTP from ALB"
-    from_port   = 8003
-    to_port     = 8003
-    protocol    = "tcp"
-    cidr_blocks = [var.vpc_cidr]
-  }
 
   egress {
     description = "Outbound internet (NAT)"
@@ -108,18 +96,12 @@ resource "aws_security_group" "customer_app" {
 }
 
 # --- Customer Worker Security Group ---
+# No inbound rules: the worker is not behind the ALB and its ECS healthCheck runs
+# inside the container (curl localhost:8004), so nothing connects to it inbound.
 resource "aws_security_group" "customer_worker" {
   name        = "${var.project_name}-${var.environment}-customer-worker"
   description = "Customer Worker - queue consumer for agent runs"
   vpc_id      = module.vpc.vpc_id
-
-  ingress {
-    description = "Health check from VPC"
-    from_port   = 8004
-    to_port     = 8004
-    protocol    = "tcp"
-    cidr_blocks = [var.vpc_cidr]
-  }
 
   egress {
     description = "Outbound internet (NAT)"

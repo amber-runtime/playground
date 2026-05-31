@@ -100,7 +100,7 @@ resource "aws_ecs_task_definition" "dashboard_api" {
 
   container_definitions = jsonencode([{
     name  = "dashboard-api"
-    image = "${aws_ecr_repository.dashboard_api.repository_url}:latest"
+    image = "${aws_ecr_repository.dashboard_api.repository_url}:${var.image_tag}"
 
     portMappings = [{
       containerPort = 8001
@@ -125,7 +125,7 @@ resource "aws_ecs_task_definition" "dashboard_api" {
     }
 
     healthCheck = {
-      command     = ["CMD-SHELL", "curl -sf http://localhost:8001/docs || exit 1"]
+      command     = ["CMD-SHELL", "curl -sf http://localhost:8001/health || exit 1"]
       interval    = 30
       timeout     = 5
       retries     = 3
@@ -174,7 +174,7 @@ resource "aws_ecs_task_definition" "customer_app" {
 
   container_definitions = jsonencode([{
     name  = "customer-app"
-    image = "${aws_ecr_repository.customer_app.repository_url}:latest"
+    image = "${aws_ecr_repository.customer_app.repository_url}:${var.image_tag}"
 
     portMappings = [{
       containerPort = 8003
@@ -199,7 +199,7 @@ resource "aws_ecs_task_definition" "customer_app" {
     }
 
     healthCheck = {
-      command     = ["CMD-SHELL", "curl -sf http://localhost:8003/docs || exit 1"]
+      command     = ["CMD-SHELL", "curl -sf http://localhost:8003/health || exit 1"]
       interval    = 30
       timeout     = 5
       retries     = 3
@@ -248,7 +248,7 @@ resource "aws_ecs_task_definition" "customer_worker" {
 
   container_definitions = jsonencode([{
     name  = "customer-worker"
-    image = "${aws_ecr_repository.customer_worker.repository_url}:latest"
+    image = "${aws_ecr_repository.customer_worker.repository_url}:${var.image_tag}"
 
     portMappings = [{
       containerPort = 8004

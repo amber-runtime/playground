@@ -25,6 +25,11 @@ region       = "us-east-1"
 # be silently deleted during destroy.
 frontend_bucket_force_destroy = true
 
+# Dev/test default: skip the Secrets Manager recovery window so terraform destroy
+# purges the db secrets immediately and their names can be reused on the next
+# apply. Set false for production-like stacks to keep a 30-day recovery window.
+secrets_force_destroy = true
+
 # Database. Leave db_password unset to let Terraform generate one and store it
 # in Secrets Manager.
 db_name     = "app"

@@ -19,6 +19,10 @@ TF_DIR="infra/terraform"
 
 cd "$(git rev-parse --show-toplevel)"
 
+# Immutable image tag = git short SHA, so each build is a distinct, rollback-able
+# revision. Also push :latest as a convenience pointer. Override with IMAGE_TAG.
+TAG="${IMAGE_TAG:-$(git rev-parse --short HEAD)}"
+
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
 REPOS=(
@@ -69,14 +73,16 @@ for svc in "${BUILD_SERVICES[@]}"; do
   fi
 
   echo ""
-  echo "==> Building ${svc}..."
-  docker build --platform linux/amd64 -f "$DOCKERFILE" -t "${ECR_REPO}:latest" .
+  echo "==> Building ${svc} (${TAG})..."
+  docker build --platform linux/amd64 -f "$DOCKERFILE" \
+    -t "${ECR_REPO}:${TAG}" -t "${ECR_REPO}:latest" .
 
   echo "==> Pushing ${svc}..."
+  docker push "${ECR_REPO}:${TAG}"
   docker push "${ECR_REPO}:latest"
 
-  echo "==> ${svc} done: ${ECR_REPO}:latest"
+  echo "==> ${svc} done: ${ECR_REPO}:${TAG}"
 done
 
 echo ""
-echo "==> All images built and pushed."
+echo "==> All images built and pushed (tag: ${TAG})."

@@ -8,8 +8,9 @@
 # =============================================================================
 
 resource "aws_secretsmanager_secret" "db" {
-  name        = "${var.project_name}-${var.environment}/db"
-  description = "RDS Proxy Postgres connection URL for ${var.project_name} (${var.environment})"
+  name                    = "${var.project_name}-${var.environment}/db"
+  description             = "RDS Proxy Postgres connection URL for ${var.project_name} (${var.environment})"
+  recovery_window_in_days = var.secrets_force_destroy ? 0 : 30
 }
 
 resource "aws_secretsmanager_secret_version" "db" {
@@ -18,8 +19,9 @@ resource "aws_secretsmanager_secret_version" "db" {
 }
 
 resource "aws_secretsmanager_secret" "db_credentials" {
-  name        = "${var.project_name}-${var.environment}/db-credentials"
-  description = "Database credentials for ${var.project_name} RDS Proxy auth (${var.environment})"
+  name                    = "${var.project_name}-${var.environment}/db-credentials"
+  description             = "Database credentials for ${var.project_name} RDS Proxy auth (${var.environment})"
+  recovery_window_in_days = var.secrets_force_destroy ? 0 : 30
 }
 
 resource "aws_secretsmanager_secret_version" "db_credentials" {

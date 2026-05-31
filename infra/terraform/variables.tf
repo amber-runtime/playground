@@ -41,6 +41,18 @@ variable "frontend_bucket_force_destroy" {
   default     = true
 }
 
+variable "secrets_force_destroy" {
+  description = "Skip the Secrets Manager recovery window so terraform destroy purges secrets immediately and names are instantly reusable. Keep true for disposable dev stacks; set false for production-like stacks."
+  type        = bool
+  default     = true
+}
+
+variable "image_tag" {
+  description = "Container image tag the ECS task definitions pull. Defaults to 'latest'; deploy.sh passes the git short SHA so each deploy is a distinct, rollback-able revision."
+  type        = string
+  default     = "latest"
+}
+
 # -----------------------------------------------------------------------------
 # VPC / Networking
 # -----------------------------------------------------------------------------
