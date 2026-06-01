@@ -18,7 +18,7 @@ BUCKET="amber-dev-frontend"
 DIST_ID=""  # set after first terraform apply: grep for cloudfront_domain in outputs
 
 echo "==> Installing dashboard dependencies..."
-cd dashboard
+cd admin_dashboard
 npm ci
 
 echo "==> Building dashboard..."
